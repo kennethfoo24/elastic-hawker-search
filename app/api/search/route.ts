@@ -28,7 +28,10 @@ interface EsHit {
 function toHits(hits: EsHit[], semField: string): Hit[] {
   return hits.map((h, i) => {
     const highlight = h.highlight?.[semField]?.[0] ?? h.highlight?.description?.[0];
-    const snippet = highlight ?? truncate(h._source.description, 160);
+    // semantic_text chunks include the copied name/aliases; a fragment that's just
+    // the dish name reads as broken — fall back to the description instead
+    const useful = highlight && highlight.replace(/<\/?em>/g, "").trim().length > 40;
+    const snippet = useful ? highlight : truncate(h._source.description, 160);
     return {
       id: h._id,
       rank: i + 1,

@@ -26,9 +26,12 @@ Customer-facing Elastic demo: side-by-side comparison of **BM25 → semantic →
 ## Current state (2026-07-07)
 
 - [x] Scaffold, deps, git init
-- [ ] Dataset: core docs (in progress), extra docs (background agent writing `data/dishes.extra.json`)
-- [ ] lib/ (es client, types, queries, chips) + seed/warm scripts
-- [ ] Seed against serverless project (needs user's `.env.local` credentials)
-- [ ] Relevance validation: all 8 chips × both models via curl; tune until each chip tells its story
-- [ ] API route + UI (4 columns, chips, model toggle, cross-column hover)
-- [ ] Local review checkpoint with Kenneth → then Phase B (Docker/Cloud Run)
+- [x] Dataset: 130 docs (`dishes.core.json` 30 story-critical + `dishes.extra.json` 100 filler)
+- [x] lib/ (es client, types, queries, chips) + seed/warm/validate-chips scripts
+- [x] Seeded against Kenneth's serverless project (Azure southeastasia, `.env.local`)
+- [x] Relevance validated & tuned: `npx tsx scripts/validate-chips.ts` — every chip's story reproduces
+  - Chip 5 ("halal chicken noodle soup in Bedok") is the flagship: RRF #1 = Mee Soto under BOTH models while lexical top-ranks chicken chop / pork bak chor mee
+  - Chips 7/8 (zh/ta) are the sparse-vs-dense punchline: ELSER noise → flip to e5 → cross-lingual hit
+  - RRF is honest, not magic: on pure-paraphrase chips a doc present in both legs can outrank the semantic hero — that's why chip 5 (both legs carry signal) is the RRF chip
+- [x] API route + UI complete, verified in browser via Playwright
+- [ ] Local review checkpoint with Kenneth → then Phase B (Dockerfile, Cloud Run deploy, README runbook)
