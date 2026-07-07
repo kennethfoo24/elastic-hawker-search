@@ -17,14 +17,21 @@ const client = new Client({
   requestTimeout: 120_000,
 });
 
-for (const field of ["semantic_elser", "semantic_e5"]) {
-  const started = Date.now();
-  await client.search({
-    index: ES_INDEX,
-    size: 1,
-    query: { match: { [field]: "warm up" } },
-    _source: false,
-  });
-  console.log(`✓ ${field} warm (${Date.now() - started}ms)`);
+async function main() {
+  for (const field of ["semantic_elser", "semantic_e5"]) {
+    const started = Date.now();
+    await client.search({
+      index: ES_INDEX,
+      size: 1,
+      query: { match: { [field]: "warm up" } },
+      _source: false,
+    });
+    console.log(`✓ ${field} warm (${Date.now() - started}ms)`);
+  }
+  console.log("Both inference endpoints are warm — demo away.");
 }
-console.log("Both inference endpoints are warm — demo away.");
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

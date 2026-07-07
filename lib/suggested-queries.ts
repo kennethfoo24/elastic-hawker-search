@@ -27,21 +27,21 @@ export const SUGGESTED_QUERIES: SuggestedQuery[] = [
     label: "spicy coconut milk noodle soup",
     archetype: "paraphrase",
     observe:
-      "Lexical latches onto literal words and surfaces nasi lemak ('coconut milk'); semantic understands you mean laksa.",
+      "Lexical ranks coconut drinks above any noodle dish; semantic understands you mean laksa. Flip the model toggle and watch the naive-hybrid column change its mind — raw score addition follows whichever leg's scale dominates.",
   },
   {
     query: "grilled fish wrapped in banana leaf",
     label: "grilled fish in banana leaf",
     archetype: "paraphrase",
     observe:
-      "Lexical finds things literally containing 'banana leaf' (thosai, banana leaf rice); only semantic surfaces sambal stingray and otah.",
+      "Lexical fixates on the words 'banana leaf' (thosai, banana leaf rice). Semantic surfaces actual grilled seafood — otah, BBQ sotong, sambal stingray. Note ELSER still keeps some keyword affinity; e5 is purely conceptual.",
   },
   {
-    query: "halal noodle soup in Bedok",
-    label: "halal noodle soup in Bedok",
+    query: "halal chicken noodle soup in Bedok",
+    label: "halal chicken noodle soup in Bedok",
     archetype: "mixed exact + concept",
     observe:
-      "Lexical anchors 'halal'/'Bedok' but top-ranks non-halal bak chor mee; semantic finds noodle soups anywhere. Only RRF puts halal mee soto at Bedok on top — rank fusion rewards agreement.",
+      "Lexical grabs anything 'chicken' (chicken chop, BBQ wings) and ranks pork bak chor mee above the halal answer. Naive hybrid inherits whichever leg's scores dominate — flip the toggle to see it change its mind. RRF lands halal mee soto at Bedok #1 under either model.",
   },
   {
     query: "comfort food for a rainy day under $5",
@@ -55,7 +55,7 @@ export const SUGGESTED_QUERIES: SuggestedQuery[] = [
     label: "辣椰浆汤面 (zh)",
     archetype: "cross-lingual",
     observe:
-      "Chinese for 'spicy coconut broth noodles'. With ELSER (English-only) the semantic column is noise; flip to e5 and laksa appears from English docs. Lexical only matches stray 辣/面 characters.",
+      "Chinese for 'spicy coconut broth noodles'. With ELSER (English-only) the semantic column is noise; flip to e5 and coconut-curry noodle dishes surface from English-language docs. Lexical can only match stray characters — 椰浆 happens to sit in nasi lemak's Chinese alias.",
     suggestedModel: "e5",
   },
   {

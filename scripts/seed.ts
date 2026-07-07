@@ -113,8 +113,15 @@ async function smokeTest() {
   }
 }
 
-const dishes = loadDishes();
-await recreateIndex();
-await ingest(dishes);
-await smokeTest();
-console.log("✓ Seed complete");
+async function main() {
+  const dishes = loadDishes();
+  await recreateIndex();
+  await ingest(dishes);
+  await smokeTest();
+  console.log("✓ Seed complete");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
