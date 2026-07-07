@@ -6,7 +6,9 @@
     "dev": "next dev --turbopack",
     "build": "next build --turbopack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "seed": "tsx scripts/seed.ts",
+    "warm": "tsx scripts/warm.ts"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^9.4.2",
