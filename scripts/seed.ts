@@ -1,6 +1,6 @@
 /**
  * Recreate the hawker-dishes index and bulk-ingest data/*.json.
- * First run auto-deploys ELSER + multilingual-e5 on the serverless project — budget 5–10 min.
+ * First run auto-deploys multilingual-e5 on the serverless project — budget a few minutes.
  * Usage: npm run seed
  */
 import { config } from "dotenv";
@@ -10,17 +10,19 @@ config();
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { Client } from "@elastic/elasticsearch";
+import { coordForRegion } from "../lib/geo";
 
 const ES_INDEX = process.env.ES_INDEX ?? "hawker-dishes";
 
 const client = new Client({
   node: process.env.ELASTICSEARCH_URL!,
   auth: { apiKey: process.env.ELASTICSEARCH_API_KEY! },
-  requestTimeout: 300_000, // inference runs at index time; first run also deploys models
+  requestTimeout: 300_000, // inference runs at index time; first run also deploys the model
 });
 
 interface RawDish {
   id: string;
+  region: string;
   notes?: string; // authoring-only field, stripped before indexing
   [k: string]: unknown;
 }
@@ -59,16 +61,17 @@ async function recreateIndex() {
         name: {
           type: "text",
           fields: { keyword: { type: "keyword" } },
-          copy_to: ["semantic_elser", "semantic_e5"],
+          copy_to: ["semantic_e5"],
         },
-        aliases: { type: "text", copy_to: ["semantic_elser", "semantic_e5"] },
-        description: { type: "text", copy_to: ["semantic_elser", "semantic_e5"] },
+        aliases: { type: "text", copy_to: ["semantic_e5"] },
+        description: { type: "text", copy_to: ["semantic_e5"] },
         stall: { type: "text" },
         region: { type: "keyword" },
         cuisine: { type: "keyword" },
         price_sgd: { type: "float" },
         tags: { type: "text", fields: { keyword: { type: "keyword" } } },
-        semantic_elser: { type: "semantic_text", inference_id: ".elser-2-elasticsearch" },
+        image_url: { type: "keyword", index: false },
+        location: { type: "geo_point" },
         semantic_e5: { type: "semantic_text", inference_id: ".multilingual-e5-small-elasticsearch" },
       },
     },
@@ -84,7 +87,11 @@ async function ingest(dishes: RawDish[]) {
     flushBytes: 50_000,
     onDocument(doc) {
       const { id, notes: _notes, ...source } = doc;
-      return [{ index: { _index: ES_INDEX, _id: id } }, source] as never;
+      // Synthetic coordinates: derived from the region centroid + a deterministic
+      // per-doc jitter, injected here so none of the 130 hand-authored docs
+      // needed real lat/lon added by hand.
+      const location = coordForRegion(doc.region, id);
+      return [{ index: { _index: ES_INDEX, _id: id } }, { ...source, location }] as never;
     },
     onDrop(doc) {
       console.error("✗ dropped doc", doc.document?.id, JSON.stringify(doc.error));
@@ -100,17 +107,23 @@ async function ingest(dishes: RawDish[]) {
 async function smokeTest() {
   const count = await client.count({ index: ES_INDEX });
   console.log(`Index ${ES_INDEX} now holds ${count.count} docs`);
-  for (const field of ["semantic_elser", "semantic_e5"] as const) {
-    const res = await client.search({
-      index: ES_INDEX,
-      size: 1,
-      query: { match: { [field]: "spicy noodles" } },
-      _source: ["name"],
-    });
-    const top = res.hits.hits[0];
-    console.log(`Smoke test ${field}: top hit = ${(top?._source as { name?: string })?.name} (score ${top?._score})`);
-    if (!top) throw new Error(`Semantic field ${field} returned no hits — model deployment may have failed`);
-  }
+  const res = await client.search({
+    index: ES_INDEX,
+    size: 1,
+    query: { match: { semantic_e5: "spicy noodles" } },
+    _source: ["name"],
+  });
+  const top = res.hits.hits[0];
+  console.log(`Smoke test semantic_e5: top hit = ${(top?._source as { name?: string })?.name} (score ${top?._score})`);
+  if (!top) throw new Error("semantic_e5 returned no hits — model deployment may have failed");
+
+  const geoRes = await client.search({
+    index: ES_INDEX,
+    size: 1,
+    query: { match_all: {} },
+    _source: ["name", "location"],
+  });
+  console.log("Smoke test location:", JSON.stringify(geoRes.hits.hits[0]?._source));
 }
 
 async function main() {

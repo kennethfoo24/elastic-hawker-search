@@ -1,5 +1,7 @@
 "use client";
 
+import { SearchGlassIcon } from "./Icons";
+
 export function SearchBar({
   value,
   onChange,
@@ -13,7 +15,7 @@ export function SearchBar({
 }) {
   return (
     <form
-      className="flex gap-2"
+      className="flex items-center gap-2 rounded-full border border-border bg-surface p-1.5 pl-5 shadow-[0_1px_2px_rgba(15,23,42,0.04),0_16px_32px_-20px_rgba(15,23,42,0.18)] transition-colors focus-within:border-primary/50 focus-within:ring-4 focus-within:ring-primary-tint"
       onSubmit={(e) => {
         e.preventDefault();
         onSearch();
@@ -22,16 +24,21 @@ export function SearchBar({
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search 130 hawker dishes — any language, any phrasing…"
+        placeholder="Search hawker dishes — any language…"
         aria-label="Search query"
-        className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-lg text-ink placeholder:text-muted/70 focus:outline-2 focus:outline-rrf/70"
+        className="w-full bg-transparent text-lg text-ink placeholder:text-muted/70 focus:outline-none"
       />
       <button
         type="submit"
         disabled={loading || !value.trim()}
-        className="shrink-0 rounded-xl bg-rrf px-6 py-3 text-lg font-semibold text-kopi transition-colors hover:bg-rrf/85 disabled:opacity-40 focus-visible:outline-2 focus-visible:outline-ink"
+        aria-label={loading ? "Searching" : "Search"}
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-primary text-white transition-colors hover:bg-primary-dark disabled:opacity-40 disabled:hover:bg-primary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
       >
-        {loading ? "Searching…" : "Search"}
+        {loading ? (
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+        ) : (
+          <SearchGlassIcon className="h-5 w-5" />
+        )}
       </button>
     </form>
   );

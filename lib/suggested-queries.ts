@@ -1,69 +1,47 @@
-import type { SemModel } from "./types";
-
 export interface SuggestedQuery {
   query: string;
   label: string;
   archetype: string;
   observe: string;
-  /** switch the model toggle to this before running, if set */
-  suggestedModel?: SemModel;
+  /** preset area key (see lib/geo.ts AREA_PRESETS) to apply when this chip is picked */
+  area?: string;
 }
 
 export const SUGGESTED_QUERIES: SuggestedQuery[] = [
   {
-    query: "laksa",
-    label: "laksa",
-    archetype: "exact name",
-    observe: "All four tiers agree — when keywords match, BM25 alone is enough.",
-  },
-  {
     query: "Hainanese chicken rice",
     label: "Hainanese chicken rice",
-    archetype: "exact multi-word",
-    observe: "BM25 wins decisively on the literal name; semantic adds little here.",
+    archetype: "exact term",
+    observe:
+      "All four columns agree — when keywords match, Keyword alone is enough. Semantic, Combined and Hybrid add nothing here, and cost more to run.",
   },
   {
     query: "spicy coconut milk noodle soup",
     label: "spicy coconut milk noodle soup",
     archetype: "paraphrase",
     observe:
-      "Lexical ranks coconut drinks above any noodle dish; semantic understands you mean laksa. Flip the model toggle and watch the naive-hybrid column change its mind — raw score addition follows whichever leg's scale dominates.",
+      "Keyword barely finds anything and ranks Nasi Lemak over Katong Laksa. Semantic understands the paraphrase but only gets Laksa to #3. Keyword + Semantic (naive addition) still ranks Nasi Lemak #1 — BM25's larger scale drowns out the semantic signal. Hybrid (+RRF) is the one column that promotes Katong Laksa to #1, by rank instead of raw score.",
   },
   {
-    query: "grilled fish wrapped in banana leaf",
-    label: "grilled fish in banana leaf",
-    archetype: "paraphrase",
-    observe:
-      "Lexical fixates on the words 'banana leaf' (thosai, banana leaf rice). Semantic surfaces actual grilled seafood — otah, BBQ sotong, sambal stingray. Note ELSER still keeps some keyword affinity; e5 is purely conceptual.",
-  },
-  {
-    query: "halal chicken noodle soup in Bedok",
-    label: "halal chicken noodle soup in Bedok",
-    archetype: "mixed exact + concept",
-    observe:
-      "Lexical grabs anything 'chicken' (chicken chop, BBQ wings) and ranks pork bak chor mee above the halal answer. Naive hybrid inherits whichever leg's scores dominate — flip the toggle to see it change its mind. RRF lands halal mee soto at Bedok #1 under either model.",
-  },
-  {
-    query: "comfort food for a rainy day under $5",
+    query: "something warm and filling to eat when it's raining outside",
     label: "rainy-day comfort food",
     archetype: "pure concept",
     observe:
-      "Lexical is near-random on abstract intent; ELSER shines on English abstraction. (Note: '$5' isn't a real filter — segue into structured filtering.)",
+      "Keyword returns nothing — there's no literal keyword tying this sentence to any dish. Semantic reads the mood and surfaces real comfort food. With no lexical signal to fuse, Combined and Hybrid simply inherit Semantic's read — a graceful fallback, not a failure.",
   },
   {
-    query: "辣椰浆汤面",
-    label: "辣椰浆汤面 (zh)",
-    archetype: "cross-lingual",
+    query: "javanese noodles in sweet potato gravy",
+    label: "javanese noodles in sweet potato gravy",
+    archetype: "clean win — Hybrid hero",
     observe:
-      "Chinese for 'spicy coconut broth noodles'. With ELSER (English-only) the semantic column is noise; flip to e5 and coconut-curry noodle dishes surface from English-language docs. Lexical can only match stray characters — 椰浆 happens to sit in nasi lemak's Chinese alias.",
-    suggestedModel: "e5",
+      "Keyword narrowly ranks Curry Chicken Noodles above Mee Rebus — the actual Javanese sweet-potato-gravy dish — on raw token overlap. Semantic correctly leads with Mee Rebus. But Keyword + Semantic (naive addition) still keeps Curry Chicken Noodles on top — adding the semantic score isn't enough to overturn BM25's larger scale. Hybrid (+RRF) is the one column that matches Semantic's correct read, because it fuses by rank, not magnitude.",
   },
   {
-    query: "மீன் தலை கறி",
-    label: "மீன் தலை கறி (ta)",
-    archetype: "cross-lingual, non-Latin",
+    query: "spicy noodle soup",
+    label: "spicy noodle soup, staying in the East",
+    archetype: "geospatial filter",
+    area: "east",
     observe:
-      "Tamil for 'fish head curry' — zero lexical overlap with the docs. Sparse ELSER fails; dense multilingual-e5 retrieves it cross-lingually. The sparse-vs-dense punchline.",
-    suggestedModel: "e5",
+      "Search this without a filter and Hybrid's top picks scatter across the island — Lau Pa Sat, Tiong Bahru, Ghim Moh. Apply the East area pill and the same relevance engine runs over a narrower candidate pool: Bak Chor Mee and Mee Soto (both Bedok) keep their top ranks, while genuinely-East dishes like Katong Laksa and Seafood Hor Fun (East Coast) replace the far-flung ones. Same ranking logic, just constrained to what's actually nearby.",
   },
 ];

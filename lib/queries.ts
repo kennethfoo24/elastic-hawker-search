@@ -1,108 +1,121 @@
-import type { SemModel } from "./types";
+import type { AreaPreset } from "./geo";
 
 /**
- * The four query builders — the heart of the demo.
- * All use the retriever framework so the tiers differ ONLY in retrieval strategy.
- * `match` on a semantic_text field is the documented recommended semantic query.
+ * The four query builders — the heart of the demo. They form an additive
+ * progression: Keyword -> Semantic -> Keyword+Semantic (naive) -> +RRF.
+ * Semantic search always uses multilingual-e5 (`semantic_e5`) — `match` on a
+ * semantic_text field is the documented recommended semantic query.
  */
-
-export const SEM_FIELD: Record<SemModel, "semantic_elser" | "semantic_e5"> = {
-  elser: "semantic_elser",
-  e5: "semantic_e5",
-};
 
 const LEXICAL_FIELDS = ["name^3", "aliases^2", "description", "stall", "tags"];
 
-const SIZE = 10;
+const SIZE = 5;
 
-function lexicalLeg(q: string, name?: string) {
+/**
+ * The keyword leg used everywhere (column 1, and as the keyword leg inside
+ * Combined/Hybrid) — `minimum_should_match: "75%"` so a query with no real
+ * lexical overlap returns genuinely nothing, instead of a long tail of
+ * single-token matches. This is also what makes the KEY attribution shown on
+ * the Combined/Hybrid cards honest: it's the exact query column 1 runs.
+ */
+function keywordQuery(q: string) {
   return {
     multi_match: {
       query: q,
       fields: LEXICAL_FIELDS,
-      ...(name ? { _name: name } : {}),
+      minimum_should_match: "75%",
     },
   };
 }
 
-function semanticLeg(q: string, semField: string, name?: string) {
+function semanticQuery(q: string) {
+  return { match: { semantic_e5: { query: q } } };
+}
+
+/** Wrap a query in a geo_distance filter when an area preset is active — same candidate pool for every column. */
+function withGeo(query: object, area?: AreaPreset | null) {
+  if (!area) return query;
   return {
-    match: {
-      [semField]: { query: q, ...(name ? { _name: name } : {}) },
+    bool: {
+      must: query,
+      filter: {
+        geo_distance: {
+          distance: `${area.radiusKm}km`,
+          location: { lat: area.lat, lon: area.lon },
+        },
+      },
     },
   };
 }
 
-/** Tier 1 — pure BM25 keyword matching. */
-export function buildLexical(q: string) {
+const SOURCE_EXCLUDES = { excludes: ["semantic_e5"] };
+
+/** Column 1 — Keyword: pure BM25 matching. Wins on exact names; genuinely empty when nothing lexically overlaps. */
+export function buildKeyword(q: string, area?: AreaPreset | null) {
   return {
-    retriever: { standard: { query: lexicalLeg(q) } },
+    retriever: { standard: { query: withGeo(keywordQuery(q), area) } },
     size: SIZE,
-    _source: { excludes: ["semantic_elser", "semantic_e5"] },
+    _source: SOURCE_EXCLUDES,
     highlight: { fields: { description: {} } },
   };
 }
 
-/** Tier 2 — pure semantic retrieval against the selected model's semantic_text field. */
-export function buildSemantic(q: string, model: SemModel) {
-  const semField = SEM_FIELD[model];
+/** Column 2 — Semantic: multilingual-e5 dense retrieval. Cross-lingual; reads intent, not literal words. */
+export function buildSemantic(q: string, area?: AreaPreset | null) {
   return {
-    retriever: { standard: { query: semanticLeg(q, semField) } },
+    retriever: { standard: { query: withGeo(semanticQuery(q), area) } },
     size: SIZE,
-    _source: { excludes: ["semantic_elser", "semantic_e5"] },
+    _source: SOURCE_EXCLUDES,
     highlight: {
-      fields: {
-        [semField]: { type: "semantic", number_of_fragments: 1, order: "score" },
-      },
+      fields: { semantic_e5: { type: "semantic", number_of_fragments: 1, order: "score" } },
     },
   };
 }
 
 /**
- * Tier 3 — naive hybrid (deliberate anti-pattern): bool/should adds raw BM25 and
- * semantic scores despite incompatible scales (ELSER ~10–20 swamps BM25; e5 ~1 gets
- * swamped). `_name` lets the UI badge which leg(s) actually matched each hit.
+ * Column 3 — Keyword + Semantic (naive): the anti-pattern. Raw score addition
+ * in one bool.should — BM25 magnitude (often 5-10+) drowns e5's cosine
+ * similarity (~0.9), so the keyword leg silently dominates the ranking even
+ * when the semantic leg disagrees. This is what most hand-rolled "hybrid
+ * search" actually looks like, and why it needs fixing.
  */
-export function buildNaiveHybrid(q: string, model: SemModel) {
-  const semField = SEM_FIELD[model];
+export function buildCombined(q: string, area?: AreaPreset | null) {
   return {
     retriever: {
       standard: {
-        query: {
-          bool: {
-            should: [lexicalLeg(q, "lexical_leg"), semanticLeg(q, semField, "semantic_leg")],
-          },
-        },
+        query: withGeo({ bool: { should: [keywordQuery(q), semanticQuery(q)] } }, area),
       },
     },
     size: SIZE,
-    _source: { excludes: ["semantic_elser", "semantic_e5"] },
+    _source: SOURCE_EXCLUDES,
+    highlight: {
+      fields: { semantic_e5: { type: "semantic", number_of_fragments: 1, order: "score" } },
+    },
   };
 }
 
 /**
- * Tier 4 — hybrid via reciprocal rank fusion: same two legs, fused by rank
- * (score = Σ 1/(rank + 60)), immune to score-scale mismatch.
+ * Column 4 — Keyword + Semantic + RRF: reciprocal rank fusion of the same two
+ * legs, but by rank instead of raw score — immune to the BM25/cosine scale
+ * mismatch that breaks naive combination. `rank_constant: 60` is the
+ * documented default; `rank_window_size: 50` (default 10 is too shallow).
  */
-export function buildRrf(q: string, model: SemModel) {
-  const semField = SEM_FIELD[model];
+export function buildHybrid(q: string, area?: AreaPreset | null) {
   return {
     retriever: {
       rrf: {
         retrievers: [
-          { standard: { query: lexicalLeg(q) } },
-          { standard: { query: semanticLeg(q, semField) } },
+          { standard: { query: withGeo(keywordQuery(q), area) } },
+          { standard: { query: withGeo(semanticQuery(q), area) } },
         ],
         rank_constant: 60,
         rank_window_size: 50,
       },
     },
     size: SIZE,
-    _source: { excludes: ["semantic_elser", "semantic_e5"] },
+    _source: SOURCE_EXCLUDES,
     highlight: {
-      fields: {
-        [semField]: { type: "semantic", number_of_fragments: 1, order: "score" },
-      },
+      fields: { semantic_e5: { type: "semantic", number_of_fragments: 1, order: "score" } },
     },
   };
 }

@@ -1,45 +1,52 @@
 @import "tailwindcss";
 
 @theme {
-  --color-kopi: #141110;
-  --color-surface: #1d1815;
-  --color-raised: #272019;
-  --color-line: #362c24;
-  --color-ink: #f4ece2;
-  --color-muted: #9c8f84;
+  --color-shell: #f7f8fa;
+  --color-surface: #ffffff;
+  --color-sunken: #eef1f3;
+  --color-ink: #14181b;
+  --color-muted: #6b7280;
+  --color-border: #e4e7eb;
 
-  --color-lexical: #7fb2d9;
-  --color-semantic: #86c08a;
-  --color-naive: #d9a441;
-  --color-rrf: #f0603a;
+  --color-primary: #00863f;
+  --color-primary-dark: #00692f;
+  --color-primary-tint: #e3f7ec;
 
-  --font-display: var(--font-anton);
-  --font-body: var(--font-archivo);
+  --color-destructive: #d6301f;
+  --color-destructive-tint: #fbeae8;
+
+  --color-brand: #00b14f;
+  --color-brand-dark: #00953f;
+
+  --font-display: var(--font-poppins);
+  --font-body: var(--font-inter);
   --font-mono: var(--font-plex-mono);
+  --font-hero: var(--font-baloo);
 }
 
 body {
-  background: var(--color-kopi);
+  background: var(--color-shell);
   color: var(--color-ink);
   font-family: var(--font-body), sans-serif;
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--color-rrf) 40%, transparent);
+  background: var(--color-primary-tint);
+  color: var(--color-primary-dark);
 }
 
 /* highlighted terms from Elasticsearch highlighters */
 .snippet em {
   font-style: normal;
-  border-radius: 2px;
-  padding: 0 1px;
-  background: color-mix(in srgb, var(--tier-color, var(--color-ink)) 22%, transparent);
-  color: color-mix(in srgb, var(--tier-color, var(--color-ink)) 70%, var(--color-ink));
+  border-radius: 3px;
+  padding: 0 2px;
+  background: var(--color-primary-tint);
+  color: var(--color-primary-dark);
 }
 
 @keyframes pulse-soft {
   50% {
-    opacity: 0.45;
+    opacity: 0.5;
   }
 }
 .skeleton {

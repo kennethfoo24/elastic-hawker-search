@@ -1,17 +1,19 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { ModelToggle } from "@/components/ModelToggle";
 import { QueryChips } from "@/components/QueryChips";
+import { AreaFilter } from "@/components/AreaFilter";
 import { SearchBar } from "@/components/SearchBar";
 import { TierColumn } from "@/components/TierColumn";
+import { TierIcon } from "@/components/Icons";
+import { HeroCollage } from "@/components/HeroCollage";
 import { TIERS } from "@/lib/tiers";
 import type { SuggestedQuery } from "@/lib/suggested-queries";
-import type { SearchResponse, SemModel } from "@/lib/types";
+import type { SearchResponse } from "@/lib/types";
 
 export default function Home() {
   const [query, setQuery] = useState("");
-  const [model, setModel] = useState<SemModel>("elser");
+  const [area, setArea] = useState<string | null>(null);
   const [data, setData] = useState<SearchResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [activeChip, setActiveChip] = useState<SuggestedQuery | null>(null);
@@ -19,7 +21,7 @@ export default function Home() {
   const [fatal, setFatal] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const runSearch = useCallback(async (q: string, m: SemModel) => {
+  const runSearch = useCallback(async (q: string, areaKey: string | null) => {
     if (!q.trim()) return;
     abortRef.current?.abort();
     const controller = new AbortController();
@@ -30,7 +32,7 @@ export default function Home() {
       const res = await fetch("/api/search", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ query: q, model: m }),
+        body: JSON.stringify({ query: q, area: areaKey }),
         signal: controller.signal,
       });
       if (!res.ok) throw new Error((await res.json()).error ?? `HTTP ${res.status}`);
@@ -42,40 +44,44 @@ export default function Home() {
     }
   }, []);
 
-  const handleModelChange = (m: SemModel) => {
-    setModel(m);
-    if (data) runSearch(data.query, m); // semantic tiers depend on the model
-  };
-
   const handleChip = (sq: SuggestedQuery) => {
+    const areaKey = sq.area ?? null;
     setQuery(sq.query);
     setActiveChip(sq);
-    runSearch(sq.query, model);
+    setArea(areaKey);
+    runSearch(sq.query, areaKey);
+  };
+
+  const handleAreaPick = (areaKey: string | null) => {
+    setArea(areaKey);
+    setActiveChip(null);
+    if (query.trim()) runSearch(query, areaKey);
   };
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-6 px-4 py-6 sm:px-6">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-muted">
-            Elasticsearch relevance demo
-          </p>
-          <h1 className="font-display text-5xl uppercase leading-none tracking-wide text-ink sm:text-6xl">
-            Hawker Search
-          </h1>
-          {/* four-color stripe: one segment per retrieval strategy */}
-          <div className="mt-2 flex h-1.5 w-56 overflow-hidden rounded-full">
-            <div className="flex-1 bg-lexical" />
-            <div className="flex-1 bg-semantic" />
-            <div className="flex-1 bg-naive" />
-            <div className="flex-1 bg-rrf" />
+    <div className="mx-auto flex min-h-screen max-w-[1600px] flex-col gap-6 px-4 pb-6 sm:px-6">
+      <header className="relative -mx-4 overflow-hidden bg-brand px-4 py-12 sm:-mx-6 sm:rounded-b-[28px] sm:px-10 sm:py-16">
+        <div className="relative flex items-center justify-between gap-10">
+          <div className="flex flex-col items-start gap-7">
+            <h1 className="font-hero text-5xl font-bold leading-none tracking-tight text-white sm:text-7xl">
+              Hawker Food
+            </h1>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {TIERS.map((meta, i) => (
+                <div key={meta.key} className="flex items-center gap-2">
+                  <span className="flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white backdrop-blur-sm">
+                    <TierIcon tier={meta.key} className="h-3.5 w-3.5 text-white" />
+                    {meta.name}
+                  </span>
+                  {i < TIERS.length - 1 && <span className="text-white/40">→</span>}
+                </div>
+              ))}
+            </div>
           </div>
-          <p className="mt-2 max-w-xl text-sm text-muted">
-            One query, four retrieval strategies, side by side — over a multilingual Singapore hawker
-            guide on Elastic Cloud Serverless.
-          </p>
+
+          <HeroCollage />
         </div>
-        <ModelToggle model={model} onChange={handleModelChange} />
       </header>
 
       <div className="flex flex-col gap-4">
@@ -85,15 +91,16 @@ export default function Home() {
             setQuery(v);
             setActiveChip(null);
           }}
-          onSearch={() => runSearch(query, model)}
+          onSearch={() => runSearch(query, area)}
           loading={loading}
         />
-        <QueryChips active={activeChip} model={model} onPick={handleChip} />
+        <AreaFilter active={area} onPick={handleAreaPick} />
+        <QueryChips active={activeChip} onPick={handleChip} />
       </div>
 
       {fatal && (
-        <div className="rounded-lg border border-rrf/50 bg-rrf/10 p-4 text-sm">
-          <p className="font-semibold text-rrf">Search failed</p>
+        <div className="rounded-2xl border border-destructive/30 bg-destructive-tint p-4 text-sm">
+          <p className="font-semibold text-destructive">Search failed</p>
           <p className="mt-1 text-ink/85">{fatal}</p>
         </div>
       )}
@@ -105,7 +112,6 @@ export default function Home() {
             meta={meta}
             result={data?.tiers[meta.key] ?? null}
             loading={loading}
-            model={model}
             hoverId={hoverId}
             onHover={setHoverId}
           />
@@ -113,8 +119,8 @@ export default function Home() {
       </main>
 
       <footer className="flex items-center justify-between text-[11px] text-muted/70">
-        <span className="font-mono">index: hawker-dishes · ELSER + multilingual-e5 via semantic_text</span>
-        <span>Hover a dish to trace it across all four strategies</span>
+        <span className="font-mono">hawker-dishes · multilingual-e5</span>
+        <span>Hover a dish to trace it across columns</span>
       </footer>
     </div>
   );

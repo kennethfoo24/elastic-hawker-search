@@ -1,0 +1,56 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hawker-search
+  labels:
+    app: hawker-search
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hawker-search
+  template:
+    metadata:
+      labels:
+        app: hawker-search
+    spec:
+      containers:
+        - name: hawker-search
+          image: kennethfoo24/elastic-hawker-search:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: ES_INDEX
+              value: "hawker-dishes"
+            - name: ELASTICSEARCH_URL
+              valueFrom:
+                secretKeyRef:
+                  name: hawker-es
+                  key: ELASTICSEARCH_URL
+            - name: ELASTICSEARCH_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: hawker-es
+                  key: ELASTICSEARCH_API_KEY
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          # "/" renders without touching Elasticsearch — a safe probe target.
+          # /api/search throws if ES env is missing/unreachable, so it must not be probed.
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20

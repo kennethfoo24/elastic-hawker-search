@@ -1,5 +1,5 @@
 /**
- * Warm both inference endpoints before a live demo — serverless ML allocations
+ * Warm the inference endpoint before a live demo — serverless ML allocations
  * scale to zero when idle and a cold first query can stall 30s+.
  * Run ~5 minutes before demoing: npm run warm
  */
@@ -18,17 +18,15 @@ const client = new Client({
 });
 
 async function main() {
-  for (const field of ["semantic_elser", "semantic_e5"]) {
-    const started = Date.now();
-    await client.search({
-      index: ES_INDEX,
-      size: 1,
-      query: { match: { [field]: "warm up" } },
-      _source: false,
-    });
-    console.log(`✓ ${field} warm (${Date.now() - started}ms)`);
-  }
-  console.log("Both inference endpoints are warm — demo away.");
+  const started = Date.now();
+  await client.search({
+    index: ES_INDEX,
+    size: 1,
+    query: { match: { semantic_e5: "warm up" } },
+    _source: false,
+  });
+  console.log(`✓ semantic_e5 warm (${Date.now() - started}ms)`);
+  console.log("The inference endpoint is warm — demo away.");
 }
 
 main().catch((err) => {

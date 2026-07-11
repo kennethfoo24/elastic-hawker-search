@@ -1,6 +1,9 @@
-export type SemModel = "elser" | "e5";
+export type TierKey = "keyword" | "semantic" | "combined" | "hybrid";
 
-export type TierKey = "lexical" | "semantic" | "naiveHybrid" | "rrf";
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+}
 
 export interface Dish {
   id: string;
@@ -12,6 +15,7 @@ export interface Dish {
   cuisine: string;
   price_sgd: number;
   tags: string[];
+  image_url?: string;
 }
 
 export interface Hit {
@@ -25,10 +29,12 @@ export interface Hit {
   price_sgd: number;
   tags: string[];
   snippet: string;
-  /** which bool/should legs matched (naive hybrid tier only) */
-  matchedLegs?: string[];
-  /** constituent ranks in the standalone lexical/semantic tiers (rrf tier only) */
-  legRanks?: { lexical: number | null; semantic: number | null };
+  image_url: string | null;
+  location: GeoPoint | null;
+  /** distance in km from the active area preset's center, only set when an area filter is applied */
+  distanceKm: number | null;
+  /** constituent ranks in the standalone keyword/semantic tiers (combined + hybrid tiers only) */
+  legRanks?: { keyword: number | null; semantic: number | null };
 }
 
 export interface TierResult {
@@ -42,6 +48,6 @@ export interface TierResult {
 
 export interface SearchResponse {
   query: string;
-  model: SemModel;
+  area: string | null;
   tiers: Record<TierKey, TierResult>;
 }

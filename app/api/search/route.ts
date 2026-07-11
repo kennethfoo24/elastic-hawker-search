@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getEsClient, ES_INDEX } from "@/lib/es";
-import { buildLexical, buildSemantic, buildNaiveHybrid, buildRrf, SEM_FIELD } from "@/lib/queries";
-import type { Hit, SearchResponse, SemModel, TierKey, TierResult } from "@/lib/types";
+import { buildKeyword, buildSemantic, buildCombined, buildHybrid } from "@/lib/queries";
+import { findAreaPreset, haversineKm } from "@/lib/geo";
+import type { GeoPoint, Hit, SearchResponse, TierKey, TierResult } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -14,6 +15,8 @@ interface EsHitSource {
   price_sgd: number;
   tags: string[];
   description: string;
+  image_url?: string;
+  location?: GeoPoint;
 }
 
 // Loose shape of what we consume from the ES response
@@ -22,16 +25,16 @@ interface EsHit {
   _score: number | null;
   _source: EsHitSource;
   highlight?: Record<string, string[]>;
-  matched_queries?: string[];
 }
 
-function toHits(hits: EsHit[], semField: string): Hit[] {
+function toHits(hits: EsHit[], highlightField: string, areaCenter: GeoPoint | null): Hit[] {
   return hits.map((h, i) => {
-    const highlight = h.highlight?.[semField]?.[0] ?? h.highlight?.description?.[0];
+    const highlight = h.highlight?.[highlightField]?.[0] ?? h.highlight?.description?.[0];
     // semantic_text chunks include the copied name/aliases; a fragment that's just
     // the dish name reads as broken — fall back to the description instead
     const useful = highlight && highlight.replace(/<\/?em>/g, "").trim().length > 40;
     const snippet = useful ? highlight : truncate(h._source.description, 160);
+    const location = h._source.location ?? null;
     return {
       id: h._id,
       rank: i + 1,
@@ -43,7 +46,9 @@ function toHits(hits: EsHit[], semField: string): Hit[] {
       price_sgd: h._source.price_sgd,
       tags: h._source.tags ?? [],
       snippet,
-      ...(h.matched_queries ? { matchedLegs: h.matched_queries } : {}),
+      image_url: h._source.image_url ?? null,
+      location,
+      distanceKm: areaCenter && location ? haversineKm(areaCenter, location) : null,
     };
   });
 }
@@ -59,20 +64,28 @@ function esErrorMessage(err: unknown): string {
   return e.message ?? String(err);
 }
 
+// Which highlighted field to read back per column.
+const HIGHLIGHT_FIELD: Record<TierKey, string> = {
+  keyword: "description",
+  semantic: "semantic_e5",
+  combined: "semantic_e5",
+  hybrid: "semantic_e5",
+};
+
 export async function POST(req: Request) {
-  const { query, model } = (await req.json()) as { query?: string; model?: SemModel };
+  const { query, area: areaKey } = (await req.json()) as { query?: string; area?: string };
   if (!query?.trim()) {
     return NextResponse.json({ error: "query is required" }, { status: 400 });
   }
-  const semModel: SemModel = model === "e5" ? "e5" : "elser";
-  const semField = SEM_FIELD[semModel];
   const q = query.trim();
+  const area = findAreaPreset(areaKey);
+  const areaCenter: GeoPoint | null = area ? { lat: area.lat, lon: area.lon } : null;
 
   const bodies: Record<TierKey, object> = {
-    lexical: buildLexical(q),
-    semantic: buildSemantic(q, semModel),
-    naiveHybrid: buildNaiveHybrid(q, semModel),
-    rrf: buildRrf(q, semModel),
+    keyword: buildKeyword(q, area),
+    semantic: buildSemantic(q, area),
+    combined: buildCombined(q, area),
+    hybrid: buildHybrid(q, area),
   };
 
   const es = getEsClient();
@@ -90,7 +103,7 @@ export async function POST(req: Request) {
         tookMs,
         esTookMs: res.took ?? null,
         totalHits,
-        hits: toHits(res.hits.hits as unknown as EsHit[], semField),
+        hits: toHits(res.hits.hits as unknown as EsHit[], HIGHLIGHT_FIELD[key], areaCenter),
       } satisfies TierResult;
     })
   );
@@ -104,16 +117,21 @@ export async function POST(req: Request) {
         : { key, tookMs: 0, esTookMs: null, totalHits: 0, hits: [], error: esErrorMessage(s.reason) };
   });
 
-  // RRF per-leg attribution: the RRF legs are the exact tier-1/tier-2 queries,
-  // so each fused hit's constituent ranks come from an _id lookup — no explain:true needed.
-  if (!tiers.rrf.error) {
-    const rankOf = (tier: TierResult, id: string) => tier.hits.find((h) => h.id === id)?.rank ?? null;
-    tiers.rrf.hits = tiers.rrf.hits.map((h) => ({
+  // Combined + Hybrid attribution: both legs are the exact keyword/semantic
+  // queries from columns 1 & 2, so each fused hit's constituent ranks come
+  // from an _id lookup — no explain:true needed.
+  const rankOf = (tier: TierResult, id: string) => tier.hits.find((h) => h.id === id)?.rank ?? null;
+  for (const key of ["combined", "hybrid"] as const) {
+    if (tiers[key].error) continue;
+    tiers[key].hits = tiers[key].hits.map((h) => ({
       ...h,
-      legRanks: { lexical: rankOf(tiers.lexical, h.id), semantic: rankOf(tiers.semantic, h.id) },
+      legRanks: {
+        keyword: rankOf(tiers.keyword, h.id),
+        semantic: rankOf(tiers.semantic, h.id),
+      },
     }));
   }
 
-  const payload: SearchResponse = { query: q, model: semModel, tiers };
+  const payload: SearchResponse = { query: q, area: area?.key ?? null, tiers };
   return NextResponse.json(payload);
 }
