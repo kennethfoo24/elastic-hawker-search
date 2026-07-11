@@ -13,6 +13,9 @@ FROM node:22-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# git doesn't materialize empty directories, so a public/ with no tracked files
+# won't exist after checkout — ensure it's there for the runner stage's COPY below.
+RUN mkdir -p ./public
 RUN npm run build
 
 # ---- runner: minimal runtime image using the standalone server ----
