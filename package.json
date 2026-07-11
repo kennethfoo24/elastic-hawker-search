@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint",
     "seed": "tsx scripts/seed.ts",
-    "warm": "tsx scripts/warm.ts"
+    "warm": "tsx scripts/warm.ts",
+    "deploy": "bash scripts/deploy-cloud-run.sh"
   },
   "dependencies": {
     "@elastic/elasticsearch": "^9.4.2",

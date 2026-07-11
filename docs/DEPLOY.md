@@ -1,8 +1,8 @@
-# Deploy runbook: Docker Hub → GKE
+# Deploy runbook: Docker Hub → Cloud Run
 
-This covers everything needed to go from a git push to a publicly reachable demo on GKE.
-Elasticsearch itself is **external** (Elastic Cloud Serverless) — nothing ES-related runs
-in the cluster; the app just needs the right env vars at runtime.
+This covers everything needed to go from a git push to a publicly reachable demo on Cloud
+Run. Elasticsearch itself is **external** (Elastic Cloud Serverless) — nothing ES-related
+runs in Cloud Run; the container just needs the right env vars at runtime.
 
 ## 1. One-time setup
 
@@ -14,25 +14,19 @@ GitHub repo (Settings → Secrets and variables → Actions) add:
 - `DOCKERHUB_TOKEN` = the access token (not your account password)
 
 That's the only CI secret needed — the workflow (`.github/workflows/docker-publish.yml`)
-only builds and pushes; it never touches Elasticsearch or GKE.
+only builds and pushes; it never touches GCP.
 
 ### 1b. Local tooling
-Install `gcloud`, `kubectl`, and the GKE auth plugin:
+Install the `gcloud` CLI and authenticate:
 ```
-gcloud components install gke-gcloud-auth-plugin
+gcloud auth login
+gcloud config set project <your-gcp-project-id>
 ```
-
-### 1c. Create the GKE cluster (Singapore region, matching the app's target region)
-```
-gcloud container clusters create-auto hawker-search --region asia-southeast1
-gcloud container clusters get-credentials hawker-search --region asia-southeast1
-```
-(Autopilot keeps node management out of scope; a Standard cluster works too.)
 
 ## 2. Seed and warm Elasticsearch (before first use, and before every demo)
 
 These are dev-machine steps against the external serverless project — not part of the
-image or the cluster:
+image or the Cloud Run service:
 ```
 npm run seed   # once: creates/populates the hawker-dishes index, deploys the e5 model
 npm run warm   # ~5 min before every demo: serverless ML scales to zero when idle
@@ -51,41 +45,47 @@ docker run --rm -p 8080:8080 --env-file .env.local hawker-search:test
 # open http://localhost:8080
 ```
 
-## 4. Create the in-cluster Elasticsearch secret
-Never commit real values — `k8s/secret.example.yaml` is a template only. Create the real
-secret from your gitignored `.env.local`:
+## 4. Deploy to Cloud Run
 ```
-export $(grep -v '^#' .env.local | xargs)
-kubectl create secret generic hawker-es \
-  --from-literal=ELASTICSEARCH_URL="$ELASTICSEARCH_URL" \
-  --from-literal=ELASTICSEARCH_API_KEY="$ELASTICSEARCH_API_KEY"
+npm run deploy
+```
+This runs `scripts/deploy-cloud-run.sh`, which:
+- reads `ELASTICSEARCH_URL` / `ELASTICSEARCH_API_KEY` / `ES_INDEX` from `.env.local`
+- pushes the API key into **Secret Manager** (`hawker-es-api-key`) and grants the Cloud
+  Run runtime service account `secretAccessor` — the key is never passed as a plain
+  `--set-env-vars` value, which would otherwise sit in plaintext in the revision config
+- deploys `kennethfoo24/elastic-hawker-search:latest` to the Cloud Run service
+  `hawker-search` in `asia-southeast1`, publicly accessible (`--allow-unauthenticated`)
+
+Equivalent manual command, if you'd rather not use the script (per `docs/PLAN.md`):
+```
+gcloud run deploy hawker-search --image=docker.io/kennethfoo24/elastic-hawker-search:latest \
+  --region=asia-southeast1 --allow-unauthenticated --port=8080 \
+  --set-env-vars=ES_INDEX=hawker-dishes,ELASTICSEARCH_URL=... \
+  --set-secrets=ELASTICSEARCH_API_KEY=hawker-es-api-key:latest
 ```
 
-## 5. Deploy
-```
-kubectl apply -f k8s/deployment.yaml -f k8s/service.yaml
-kubectl get pods -w                # wait for both replicas Running/Ready
-kubectl get svc hawker-search -w   # wait for EXTERNAL-IP to be assigned
-```
-Open `http://<EXTERNAL-IP>/` and run through all 5 suggested-query chips.
+The command prints the public service URL on success — open it and run through all 5
+suggested-query chips.
 
-## 6. Updating the running deployment
-After a new image is pushed:
-```
-kubectl rollout restart deployment/hawker-search
-kubectl rollout status deployment/hawker-search
-```
+## 5. Updating the running deployment
+Re-run `npm run deploy` (or the manual command above) after a new image is pushed —
+`gcloud run deploy` always creates a new revision from the given image tag and shifts
+traffic to it.
 
-## 7. Tear down after the demo (avoid ongoing cost)
-A GKE cluster + LoadBalancer bill continuously while they exist:
+## 6. Tear down after the demo (avoid ongoing cost)
 ```
-kubectl delete -f k8s/service.yaml -f k8s/deployment.yaml
-gcloud container clusters delete hawker-search --region asia-southeast1
+gcloud run services delete hawker-search --region=asia-southeast1
+gcloud secrets delete hawker-es-api-key
 ```
 
 ## Known gaps / things to accept for a demo
-- The LoadBalancer serves plain HTTP on a raw IP — no TLS, no domain. Adding HTTPS would
-  mean an Ingress + a Google-managed certificate + a domain, which is out of scope here.
+- Cloud Run's default `*.run.app` URL is HTTPS out of the box, so no TLS setup is needed
+  (unlike the earlier GKE plan, which would have needed an Ingress + managed cert for
+  HTTPS). A custom domain is optional and out of scope here.
 - Dish photos are fetched directly by the browser from `upload.wikimedia.org` — confirm
-  they render from the public IP (no CDN/proxy involved, so this should just work, but
-  verify once after first deploy).
+  they render from the Cloud Run URL (no CDN/proxy involved, so this should just work,
+  but verify once after first deploy).
+- Cold start: Cloud Run scales to zero by default when idle, same as the ES inference
+  endpoint — the first request after idle time may be slow. Set `--min-instances=1` on
+  the service if you want to avoid this for a live demo (costs more to keep warm).

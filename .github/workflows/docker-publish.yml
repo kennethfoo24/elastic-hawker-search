@@ -4,7 +4,8 @@ name: Build and Push Docker Image
 # at runtime — nothing ES-related is needed at build time, so only Docker Hub
 # credentials are required as GitHub secrets:
 #   DOCKERHUB_USERNAME, DOCKERHUB_TOKEN (a Docker Hub access token, not the password)
-# Deploying this image to GKE is a manual `kubectl apply -f k8s/` step — see docs/DEPLOY.md.
+# Deploying this image to Cloud Run is a manual `gcloud run deploy` step — see docs/DEPLOY.md
+# (or run `npm run deploy` / `scripts/deploy-cloud-run.sh`).
 
 on:
   push:
