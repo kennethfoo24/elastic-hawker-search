@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getEsClient, ES_INDEX } from "@/lib/es";
-import { buildKeyword, buildSemantic, buildCombined, buildHybrid } from "@/lib/queries";
+import { buildQuery } from "@/lib/queries";
 import { findAreaPreset, haversineKm } from "@/lib/geo";
 import type { GeoPoint, Hit, SearchResponse, TierKey, TierResult } from "@/lib/types";
 
@@ -11,7 +11,6 @@ interface EsHitSource {
   name: string;
   stall: string;
   region: string;
-  cuisine: string;
   price_sgd: number;
   tags: string[];
   description: string;
@@ -42,7 +41,6 @@ function toHits(hits: EsHit[], highlightField: string, areaCenter: GeoPoint | nu
       name: h._source.name,
       stall: h._source.stall,
       region: h._source.region,
-      cuisine: h._source.cuisine,
       price_sgd: h._source.price_sgd,
       tags: h._source.tags ?? [],
       snippet,
@@ -81,28 +79,21 @@ export async function POST(req: Request) {
   const area = findAreaPreset(areaKey);
   const areaCenter: GeoPoint | null = area ? { lat: area.lat, lon: area.lon } : null;
 
-  const bodies: Record<TierKey, object> = {
-    keyword: buildKeyword(q, area),
-    semantic: buildSemantic(q, area),
-    combined: buildCombined(q, area),
-    hybrid: buildHybrid(q, area),
-  };
+  const keys: TierKey[] = ["keyword", "semantic", "combined", "hybrid"];
+  const bodies: Record<TierKey, object> = Object.fromEntries(
+    keys.map((key) => [key, buildQuery(key, q, area)])
+  ) as Record<TierKey, object>;
 
   const es = getEsClient();
-  const keys = Object.keys(bodies) as TierKey[];
 
   const settled = await Promise.allSettled(
     keys.map(async (key) => {
       const started = performance.now();
       const res = await es.search({ index: ES_INDEX, ...bodies[key] });
       const tookMs = Math.round(performance.now() - started);
-      const total = res.hits.total;
-      const totalHits = typeof total === "number" ? total : (total?.value ?? 0);
       return {
         key,
         tookMs,
-        esTookMs: res.took ?? null,
-        totalHits,
         hits: toHits(res.hits.hits as unknown as EsHit[], HIGHLIGHT_FIELD[key], areaCenter),
       } satisfies TierResult;
     })
@@ -112,9 +103,7 @@ export async function POST(req: Request) {
   keys.forEach((key, i) => {
     const s = settled[i];
     tiers[key] =
-      s.status === "fulfilled"
-        ? s.value
-        : { key, tookMs: 0, esTookMs: null, totalHits: 0, hits: [], error: esErrorMessage(s.reason) };
+      s.status === "fulfilled" ? s.value : { key, tookMs: 0, hits: [], error: esErrorMessage(s.reason) };
   });
 
   // Combined + Hybrid attribution: both legs are the exact keyword/semantic

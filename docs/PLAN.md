@@ -38,7 +38,7 @@ hawker-search/
 │   ├── tiers.ts                   # column metadata (name/how — no tech subtitle shown)
 │   ├── suggested-queries.ts       # 5 demo chips (data)
 │   └── types.ts
-├── data/dishes.core.json          # ~30 story-critical docs (image_url + notes)
+├── data/dishes.core.json          # ~30 story-critical docs (image_url; some carry a dev-facing `notes` field)
 ├── data/dishes.extra.json         # 93 filler docs (every doc carries a verified image_url)
 ├── scripts/seed.ts                # create index + bulk ingest + inject geo + smoke test
 ├── scripts/warm.ts                # pre-demo warm-up (one semantic query)
@@ -87,7 +87,7 @@ Analyzer: **standard** (unigram CJK is fine and reinforces the "lexical needs li
 
 ## Dataset (`data/dishes.core.json` + `data/dishes.extra.json`)
 
-123 docs total (30 core + 93 filler). Each core doc's `notes` field (stripped before indexing) records which chip it serves — see the doc itself rather than duplicating that mapping here. Every doc carries a verified `image_url` (Wikimedia Commons thumbnail — filename resolved via the Commons search + imageinfo API and checked for a real `image/*` mime type before being written, never guessed). The dataset originally had 130 docs; 7 filler docs Commons had no suitable free photo for (Fuzhou Oyster Cake, Barley Water, Hainanese Pork Chop, Hotplate Tofu, Muah Chee, Kueh Pie Tee, Min Jiang Kueh) were removed outright rather than shown with a placeholder, after confirming via `scripts/validate-chips.ts` that none of them affected a chip story. `ResultCard.tsx`'s `DishThumb` still has a gradient + monogram `onError` fallback as a defensive safety net, but nothing in the current dataset triggers it.
+123 docs total (30 core + 93 filler). 10 of the 30 core docs carry a `notes` field (stripped before indexing) recording which chip they serve — see the doc itself rather than duplicating that mapping here. Every doc carries a verified `image_url` (Wikimedia Commons thumbnail — filename resolved via the Commons search + imageinfo API and checked for a real `image/*` mime type before being written, never guessed). The dataset originally had 130 docs; 7 filler docs Commons had no suitable free photo for (Fuzhou Oyster Cake, Barley Water, Hainanese Pork Chop, Hotplate Tofu, Muah Chee, Kueh Pie Tee, Min Jiang Kueh) were removed outright rather than shown with a placeholder, after confirming via `scripts/validate-chips.ts` that none of them affected a chip story. `ResultCard.tsx`'s `DishThumb` still has a gradient + monogram `onError` fallback as a defensive safety net, but nothing in the current dataset triggers it.
 
 ## Geospatial (`lib/geo.ts`)
 
@@ -108,7 +108,7 @@ Each `{ query, label, archetype, observe, area? }`. All 5 verified against the l
 | 4 | `javanese noodles in sweet potato gravy` | clean win — **Hybrid hero** | Keyword and Combined both narrowly misrank Curry Chicken Noodles above Mee Rebus (the actual Javanese sweet-potato-gravy dish) on raw token overlap. Semantic alone gets it right. Hybrid (+RRF) is the only column that matches Semantic's correct read — naive addition isn't enough to overturn BM25's scale, rank fusion is |
 | 5 | `spicy noodle soup` + area **East** | geospatial filter | Unfiltered, Hybrid's top picks scatter across the island (Lau Pa Sat, Tiong Bahru, Ghim Moh). Filtered to the East, Bak Chor Mee and Mee Soto (both Bedok) keep their top ranks while far-flung picks are replaced by genuinely-East dishes (Katong Laksa, Seafood Hor Fun) |
 
-`archetype` and the tier `tech` fields still exist as data (read by `scripts/validate-chips.ts` and this doc) but are no longer rendered in the UI — chips show only their `label`, and columns show only their `name` — kept off-screen to reduce visual noise per the 2026-07-11 redesign below.
+`archetype` still exists as data on `SuggestedQuery` (read by `scripts/validate-chips.ts` and this doc) but is no longer rendered in the UI — chips show only their `label`. `TierMeta` (`lib/tiers.ts`) no longer has a `tech` field at all — columns show only their `name`, kept off-screen to reduce visual noise per the 2026-07-11 redesign below.
 
 ## UI
 

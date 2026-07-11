@@ -8,11 +8,10 @@ config({ path: ".env.local" });
 config();
 
 import { Client } from "@elastic/elasticsearch";
-import { buildKeyword, buildSemantic, buildCombined, buildHybrid } from "../lib/queries";
+import { buildQuery } from "../lib/queries";
 import { findAreaPreset } from "../lib/geo";
 import { SUGGESTED_QUERIES } from "../lib/suggested-queries";
 import type { TierKey } from "../lib/types";
-import type { AreaPreset } from "../lib/geo";
 
 const ES_INDEX = process.env.ES_INDEX ?? "hawker-dishes";
 const client = new Client({
@@ -23,19 +22,6 @@ const client = new Client({
 
 const TIERS: TierKey[] = ["keyword", "semantic", "combined", "hybrid"];
 
-function body(tier: TierKey, q: string, area: AreaPreset | null): object {
-  switch (tier) {
-    case "keyword":
-      return buildKeyword(q, area);
-    case "semantic":
-      return buildSemantic(q, area);
-    case "combined":
-      return buildCombined(q, area);
-    case "hybrid":
-      return buildHybrid(q, area);
-  }
-}
-
 async function main() {
   const top = Number(process.env.TOP ?? 5);
   for (const chip of SUGGESTED_QUERIES) {
@@ -44,7 +30,7 @@ async function main() {
     const results = await Promise.all(
       TIERS.map(async (tier) => {
         try {
-          const res = await client.search({ index: ES_INDEX, ...body(tier, chip.query, area) });
+          const res = await client.search({ index: ES_INDEX, ...buildQuery(tier, chip.query, area) });
           const names = (
             res.hits.hits as { _source?: { name?: string; region?: string }; _score?: number | null }[]
           )

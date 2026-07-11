@@ -5,19 +5,6 @@ export interface GeoPoint {
   lon: number;
 }
 
-export interface Dish {
-  id: string;
-  name: string;
-  aliases: string[];
-  description: string;
-  stall: string;
-  region: string;
-  cuisine: string;
-  price_sgd: number;
-  tags: string[];
-  image_url?: string;
-}
-
 export interface Hit {
   id: string;
   rank: number;
@@ -25,7 +12,6 @@ export interface Hit {
   name: string;
   stall: string;
   region: string;
-  cuisine: string;
   price_sgd: number;
   tags: string[];
   snippet: string;
@@ -40,8 +26,6 @@ export interface Hit {
 export interface TierResult {
   key: TierKey;
   tookMs: number;
-  esTookMs: number | null;
-  totalHits: number;
   hits: Hit[];
   error?: string;
 }

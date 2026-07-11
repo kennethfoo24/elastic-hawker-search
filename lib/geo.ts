@@ -52,8 +52,11 @@ export function jitter(base: GeoPoint, id: string): GeoPoint {
 
 /** Look up a dish's synthetic coordinate straight from its region. */
 export function coordForRegion(region: string, id: string): GeoPoint {
-  const base = REGION_COORDS[region] ?? REGION_COORDS["Chinatown"];
-  return jitter(base, id);
+  const base = REGION_COORDS[region];
+  if (!base) {
+    console.warn(`coordForRegion: unrecognized region "${region}" for doc ${id}, falling back to Chinatown`);
+  }
+  return jitter(base ?? REGION_COORDS["Chinatown"], id);
 }
 
 export interface AreaPreset {

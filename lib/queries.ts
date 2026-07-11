@@ -1,4 +1,5 @@
 import type { AreaPreset } from "./geo";
+import type { TierKey } from "./types";
 
 /**
  * The four query builders — the heart of the demo. They form an additive
@@ -118,4 +119,18 @@ export function buildHybrid(q: string, area?: AreaPreset | null) {
       fields: { semantic_e5: { type: "semantic", number_of_fragments: 1, order: "score" } },
     },
   };
+}
+
+/** Single dispatch point from a column key to its query builder — shared by the API route and validate-chips.ts. */
+export function buildQuery(tier: TierKey, q: string, area?: AreaPreset | null): object {
+  switch (tier) {
+    case "keyword":
+      return buildKeyword(q, area);
+    case "semantic":
+      return buildSemantic(q, area);
+    case "combined":
+      return buildCombined(q, area);
+    case "hybrid":
+      return buildHybrid(q, area);
+  }
 }
