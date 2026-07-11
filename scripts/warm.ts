@@ -1,7 +1,8 @@
 /**
- * Warm the inference endpoint before a live demo — serverless ML allocations
- * scale to zero when idle and a cold first query can stall 30s+.
- * Run ~5 minutes before demoing: npm run warm
+ * Sanity-check the semantic query end to end. No longer required before a
+ * demo — semantic_e5 runs on the Elastic Inference Service (EIS), which is
+ * shared and always-warm (no per-project ML allocation, no cold start).
+ * Kept as a quick connectivity check: npm run warm
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -25,8 +26,7 @@ async function main() {
     query: { match: { semantic_e5: "warm up" } },
     _source: false,
   });
-  console.log(`✓ semantic_e5 warm (${Date.now() - started}ms)`);
-  console.log("The inference endpoint is warm — demo away.");
+  console.log(`✓ semantic_e5 query OK (${Date.now() - started}ms)`);
 }
 
 main().catch((err) => {

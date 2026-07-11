@@ -5,15 +5,15 @@ Customer-facing Elastic demo: an additive progression across four columns — **
 ## Stack & infra
 
 - Next.js 15 (App Router, TS), Tailwind v4, `@elastic/elasticsearch` v9
-- Elasticsearch = **Elastic Cloud Serverless** (RRF + default inference endpoint `.multilingual-e5-small-elasticsearch` included out of the box)
+- Elasticsearch = **Elastic Cloud Serverless** (RRF included out of the box; semantic embeddings run on the **Elastic Inference Service** via `.microsoft-multilingual-e5-large` — shared, always-warm, no per-project ML allocation or cold start)
 - Env (`.env.local`, never committed): `ELASTICSEARCH_URL`, `ELASTICSEARCH_API_KEY`, optional `ES_INDEX` (default `hawker-dishes`)
 - Deploy target (Phase B only): Docker → Google Cloud Run, `asia-southeast1`
 
 ## Commands
 
 - `npm run dev` — local demo at :3000
-- `npm run seed` — recreate index + bulk ingest `data/*.json` (first run auto-deploys the e5 model; budget a few minutes)
-- `npm run warm` — one semantic query; run ~5 min before any live demo (ML scales to zero when idle)
+- `npm run seed` — recreate index + bulk ingest `data/*.json` (seconds, not minutes — EIS has no per-project model deploy to wait on)
+- `npm run warm` — one semantic query as a connectivity smoke test; not required before a demo (EIS is always warm)
 - `npx tsx scripts/validate-chips.ts` — curl-equivalent acceptance test for all 5 chips across all 4 columns; the demo's core "does the story actually reproduce" check
 - `npm run deploy` — deploy the latest Docker Hub image to Cloud Run (`scripts/deploy-cloud-run.sh`); see [docs/DEPLOY.md](docs/DEPLOY.md)
 
@@ -21,7 +21,7 @@ Customer-facing Elastic demo: an additive progression across four columns — **
 
 - `lib/queries.ts` holds the 4 query builders — the heart of the demo. All use the retriever framework; `match` on `semantic_text` is the recommended semantic query. `size: 5` everywhere (top-5 per column).
   - `buildKeyword` — `multi_match` with **`minimum_should_match: "75%"`**, so a query with no real lexical overlap returns genuinely nothing (empty column), not a long tail of single-token noise.
-  - `buildSemantic` — `match` on `semantic_e5` (multilingual-e5, cross-lingual dense retrieval). ELSER was removed from this build — one semantic model keeps the progression a clean 4 steps instead of a 5th sparse-vs-dense fork.
+  - `buildSemantic` — `match` on `semantic_e5` (multilingual-e5-large via EIS, cross-lingual dense retrieval). ELSER was removed from this build — one semantic model keeps the progression a clean 4 steps instead of a 5th sparse-vs-dense fork.
   - `buildCombined` — the naive anti-pattern: one `bool.should` adding the keyword leg's BM25 score to the semantic leg's cosine score directly. BM25's larger scale (5–10+) usually drowns the semantic signal — this column exists to make that failure visible, not to recommend it.
   - `buildHybrid` — the same two legs fused by **RRF** (`rank_constant: 60`, `rank_window_size: 50`) instead of raw score — immune to the scale mismatch that breaks Combined.
   - Every builder takes an optional `AreaPreset` (see `lib/geo.ts`) and wraps its query in a `geo_distance` **filter** — geo narrows the candidate pool identically for all 4 columns, it never re-ranks. This keeps the column comparison apples-to-apples even with a location filter active.
@@ -52,4 +52,5 @@ Customer-facing Elastic demo: an additive progression across four columns — **
 - [x] Fresh full browser smoke test of the 4-column progression UI end to end (Playwright, empty state + populated results, multiple viewport widths)
 - [x] Visual redesign pass: sleeker minimalist hero, reduced copy verbosity, then a GrabFood-inspired restyle (brand green hero, Baloo 2 wordmark "Hawker Food", 4 columns renamed, tier/chip subtitle copy removed, hero photo collage) — confirmed live via Playwright screenshots at desktop/tablet widths
 - [x] Phase B plumbing: multi-stage `Dockerfile` (Next.js standalone output, `node:22-alpine`), GitHub Actions workflow building/pushing to Docker Hub (`kennethfoo24/elastic-hawker-search`) on push to `main`, `scripts/deploy-cloud-run.sh` (`npm run deploy`) deploying that image to Cloud Run with the ES API key in Secret Manager (not a plain env var) — full runbook in `docs/DEPLOY.md`
+- [x] Switched `semantic_e5` from the ML-node-hosted `.multilingual-e5-small-elasticsearch` (adaptive allocations scale to zero when idle, ~30s+ cold-start risk mid-demo) to `.microsoft-multilingual-e5-large` on the **Elastic Inference Service** (shared, always-warm, billed per-token instead of per-VCU-hour) — reseeded and re-ran `validate-chips.ts`; all 5 chip stories reproduce with no dataset re-tuning needed, `npm run warm` is now optional
 - [ ] First live Cloud Run deploy + demo runbook walkthrough with Kenneth

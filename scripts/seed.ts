@@ -1,6 +1,7 @@
 /**
  * Recreate the hawker-dishes index and bulk-ingest data/*.json.
- * First run auto-deploys multilingual-e5 on the serverless project — budget a few minutes.
+ * Semantic embeddings run through the Elastic Inference Service (EIS) —
+ * shared, always-warm, no per-project model deploy or cold start.
  * Usage: npm run seed
  */
 import { config } from "dotenv";
@@ -17,7 +18,7 @@ const ES_INDEX = process.env.ES_INDEX ?? "hawker-dishes";
 const client = new Client({
   node: process.env.ELASTICSEARCH_URL!,
   auth: { apiKey: process.env.ELASTICSEARCH_API_KEY! },
-  requestTimeout: 300_000, // inference runs at index time; first run also deploys the model
+  requestTimeout: 300_000, // inference runs at index time (EIS call per doc during bulk ingest)
 });
 
 interface RawDish {
@@ -72,7 +73,7 @@ async function recreateIndex() {
         tags: { type: "text", fields: { keyword: { type: "keyword" } } },
         image_url: { type: "keyword", index: false },
         location: { type: "geo_point" },
-        semantic_e5: { type: "semantic_text", inference_id: ".multilingual-e5-small-elasticsearch" },
+        semantic_e5: { type: "semantic_text", inference_id: ".microsoft-multilingual-e5-large" },
       },
     },
   });

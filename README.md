@@ -14,7 +14,7 @@ Deploying to production: [docs/DEPLOY.md](docs/DEPLOY.md).
 ```bash
 npm install
 cp .env.example .env.local   # then fill in the variables below
-npm run seed                 # creates the index + loads the dataset (first run takes a few minutes)
+npm run seed                 # creates the index + loads the dataset
 npm run dev                  # http://localhost:3000
 ```
 
@@ -32,6 +32,6 @@ npm run dev                  # http://localhost:3000
 | --- | --- |
 | `npm run dev` | Run the app locally at :3000 |
 | `npm run seed` | Recreate the index and bulk-load `data/*.json` |
-| `npm run warm` | Warm the semantic model — run ~5 min before any live demo |
+| `npm run warm` | Optional connectivity smoke test (semantic search runs on the always-warm Elastic Inference Service, so this isn't required before a demo) |
 | `npx tsx scripts/validate-chips.ts` | Acceptance test: confirms every suggested-query chip reproduces its intended result |
 | `npm run deploy` | Deploy the latest Docker Hub image to Cloud Run (see [docs/DEPLOY.md](docs/DEPLOY.md)) |

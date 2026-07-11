@@ -23,13 +23,14 @@ gcloud auth login
 gcloud config set project <your-gcp-project-id>
 ```
 
-## 2. Seed and warm Elasticsearch (before first use, and before every demo)
+## 2. Seed Elasticsearch (before first use)
 
-These are dev-machine steps against the external serverless project — not part of the
-image or the Cloud Run service:
+Dev-machine step against the external serverless project — not part of the image or the
+Cloud Run service. Semantic embeddings run on the Elastic Inference Service (EIS), which
+is shared and always-warm, so this completes in seconds with no model deploy to wait on:
 ```
-npm run seed   # once: creates/populates the hawker-dishes index, deploys the e5 model
-npm run warm   # ~5 min before every demo: serverless ML scales to zero when idle
+npm run seed   # once: creates/populates the hawker-dishes index
+npm run warm   # optional connectivity smoke test — not required, EIS has no cold start
 npx tsx scripts/validate-chips.ts   # optional: confirms all 5 chip stories still work
 ```
 
@@ -86,6 +87,8 @@ gcloud secrets delete hawker-es-api-key
 - Dish photos are fetched directly by the browser from `upload.wikimedia.org` — confirm
   they render from the Cloud Run URL (no CDN/proxy involved, so this should just work,
   but verify once after first deploy).
-- Cold start: Cloud Run scales to zero by default when idle, same as the ES inference
-  endpoint — the first request after idle time may be slow. Set `--min-instances=1` on
-  the service if you want to avoid this for a live demo (costs more to keep warm).
+- Cold start: Cloud Run scales to zero by default when idle — the first request after
+  idle time may be slow (the Elasticsearch side no longer has this problem now that
+  `semantic_e5` runs on EIS, but the Cloud Run container itself still does). Set
+  `--min-instances=1` on the service if you want to avoid this for a live demo (costs
+  more to keep warm).

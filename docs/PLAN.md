@@ -6,7 +6,7 @@ Kenneth (Elastic SA) needs a customer-facing demo that shows **why hybrid search
 
 This design replaced an earlier "4 always-visible columns" (Keyword/Sparse/Dense/Hybrid) version of this demo after the user pressure-tested it with pointed questions ("is this rigged to show what I want?") and asked for the clearer keyword→semantic→combined→RRF story, plus geospatial + photos. See git history for the prior version.
 
-**Target infra:** user's existing **Elastic Cloud Serverless** project (verified: serverless includes RRF retriever with no license tiering, plus the out-of-the-box inference endpoint `.multilingual-e5-small-elasticsearch`; the model auto-deploys on first use). App = Next.js container deployable to **Google Cloud Run**, connected via `ELASTICSEARCH_URL` + `ELASTICSEARCH_API_KEY` env vars; identical local `npm run dev` flow.
+**Target infra:** user's existing **Elastic Cloud Serverless** project (verified: serverless includes RRF retriever with no license tiering, plus the multilingual e5-large inference endpoint `.microsoft-multilingual-e5-large` on the **Elastic Inference Service** — shared, always-warm, no per-project model deploy or scale-to-zero cold start). App = Next.js container deployable to **Google Cloud Run**, connected via `ELASTICSEARCH_URL` + `ELASTICSEARCH_API_KEY` env vars; identical local `npm run dev` flow.
 
 ## Project location
 
@@ -57,13 +57,13 @@ One doc per dish; `copy_to` fans source fields into the semantic_text field, so 
   "mappings": { "properties": {
     "name":        { "type": "text", "fields": {"keyword": {"type":"keyword"}}, "copy_to": "semantic_e5" },
     "aliases":     { "type": "text", "copy_to": "semantic_e5" },   // ["叻沙","laksa lemak","curry noodle soup",...]
-    "description": { "type": "text", "copy_to": "semantic_e5" },   // 2–3 sentences, ≤512 tokens (e5-small limit)
+    "description": { "type": "text", "copy_to": "semantic_e5" },   // 2–3 sentences — keeps 1 chunk/field so highlights stay simple
     "stall":   { "type": "text" },
     "region":  { "type": "keyword" }, "cuisine": { "type": "keyword" },
     "price_sgd": { "type": "float" }, "tags": { "type": "text", "fields": {"keyword": {"type": "keyword"}} },
     "image_url": { "type": "keyword", "index": false },
     "location": { "type": "geo_point" },
-    "semantic_e5": { "type": "semantic_text", "inference_id": ".multilingual-e5-small-elasticsearch" }
+    "semantic_e5": { "type": "semantic_text", "inference_id": ".microsoft-multilingual-e5-large" }
   } }
 }
 ```
@@ -75,7 +75,7 @@ Analyzer: **standard** (unigram CJK is fine and reinforces the "lexical needs li
 `size: 5` (top-5 per column), retriever framework throughout. `match` is the documented recommended query for semantic_text (8.18+/serverless). Every builder takes an optional `AreaPreset` and wraps its query in a `geo_distance` **filter** (not a ranking signal) so all 4 columns search the same narrowed candidate pool when an area is active.
 
 1. **Keyword — `buildKeyword(q, area?)`:** `standard` retriever → `multi_match` on `["name^3","aliases^2","description","stall","tags"]` with **`minimum_should_match: "75%"`** — genuinely returns nothing when there's no real lexical overlap, instead of a long tail of single-token matches. Default highlighter on description.
-2. **Semantic — `buildSemantic(q, area?)`:** `standard` retriever → `match` on `semantic_e5`; semantic highlighter (`"type":"semantic"`, 1 fragment, order score). Cross-lingual (multilingual-e5).
+2. **Semantic — `buildSemantic(q, area?)`:** `standard` retriever → `match` on `semantic_e5`; semantic highlighter (`"type":"semantic"`, 1 fragment, order score). Cross-lingual (multilingual-e5-large, served via the Elastic Inference Service).
 3. **Combined — `buildCombined(q, area?)`:** the naive anti-pattern. One `standard` retriever with a `bool.should` adding the keyword leg's BM25 score directly to the semantic leg's cosine score. Because BM25's scale (often 5–10+) dwarfs cosine similarity (~0.9), this column usually just re-produces Keyword's ranking with the semantic leg along for the ride, doing nothing useful. This is what most hand-rolled "hybrid search" actually looks like.
 4. **Hybrid (+RRF) — `buildHybrid(q, area?)`:** `rrf` retriever fusing the *same two legs* (keyword, semantic) by rank instead of raw score — `rank_constant: 60` (documented default), `rank_window_size: 50` (default is 10 — too shallow). Immune to the BM25/cosine scale mismatch that breaks Combined.
 
@@ -103,7 +103,7 @@ Each `{ query, label, archetype, observe, area? }`. All 5 verified against the l
 | # | Query | Archetype | Observe |
 |---|---|---|---|
 | 1 | `Hainanese chicken rice` | exact term | All four columns agree; Keyword alone is enough |
-| 2 | `spicy coconut milk noodle soup` | paraphrase | Keyword and Combined (naive) both rank Nasi Lemak over Katong Laksa — BM25's scale wins even with the semantic leg included. Semantic alone gets Laksa only to #3. Hybrid (+RRF) is the one column that promotes Katong Laksa to #1 |
+| 2 | `spicy coconut milk noodle soup` | paraphrase | Keyword and Combined (naive) both rank Nasi Lemak over Katong Laksa — BM25's scale wins even with the semantic leg included. Semantic alone doesn't even surface Katong Laksa in its top 5. Hybrid (+RRF) is still the one column that promotes Katong Laksa to #1 — rank fusion recovering a doc that no single leg ranked highest is the point |
 | 3 | `something warm and filling to eat when it's raining outside` | pure concept | Keyword returns nothing — no literal keyword ties this sentence to any dish. Semantic reads the mood; with no lexical signal to fuse, Combined and Hybrid simply inherit Semantic's read |
 | 4 | `javanese noodles in sweet potato gravy` | clean win — **Hybrid hero** | Keyword and Combined both narrowly misrank Curry Chicken Noodles above Mee Rebus (the actual Javanese sweet-potato-gravy dish) on raw token overlap. Semantic alone gets it right. Hybrid (+RRF) is the only column that matches Semantic's correct read — naive addition isn't enough to overturn BM25's scale, rank fusion is |
 | 5 | `spicy noodle soup` + area **East** | geospatial filter | Unfiltered, Hybrid's top picks scatter across the island (Lau Pa Sat, Tiong Bahru, Ghim Moh). Filtered to the East, Bak Chor Mee and Mee Soto (both Bedok) keep their top ranks while far-flung picks are replaced by genuinely-East dishes (Katong Laksa, Seafood Hor Fun) |
@@ -118,8 +118,8 @@ Each `{ query, label, archetype, observe, area? }`. All 5 verified against the l
 
 ## Seed & warm scripts
 
-- `npm run seed`: delete/create index (new mapping: `location` geo_point, `image_url`, no ELSER) → `helpers.bulk` from the two dishes JSON files, injecting `location` per doc from the region centroid + jitter (small concurrency; 300s timeout — first run auto-deploys the e5 model) → refresh → smoke-test a semantic_e5 match query + a geo doc dump → print counts.
-- `npm run warm`: one semantic query; run ~5 min before every demo (ML allocations scale to 0 when idle; cold first query can stall 30s+).
+- `npm run seed`: delete/create index (new mapping: `location` geo_point, `image_url`, no ELSER) → `helpers.bulk` from the two dishes JSON files, injecting `location` per doc from the region centroid + jitter (small concurrency; 300s timeout headroom, but EIS has no per-project model deploy to wait on — completes in seconds) → refresh → smoke-test a semantic_e5 match query + a geo doc dump → print counts.
+- `npm run warm`: one semantic query, kept as an optional connectivity smoke test. Not required before a demo — `semantic_e5` runs on the Elastic Inference Service (EIS), which is shared and always-warm (no per-project ML allocation, no cold start).
 
 ## Docker + Cloud Run
 
@@ -155,9 +155,9 @@ This runs `scripts/deploy-cloud-run.sh`, which reads `ELASTICSEARCH_URL` / `ELAS
 
 ## Gotchas (bake into README)
 
-1. Cold inference endpoint (scale-to-zero) → warm script + 60s client timeout.
+1. ~~Cold inference endpoint (scale-to-zero) → warm script + 60s client timeout.~~ No longer applies: `semantic_e5` moved from an ML-node-hosted endpoint to the Elastic Inference Service (EIS), which has no per-project allocation to cold-start. `npm run warm` is now just an optional connectivity check.
 2. RRF: no license concern on serverless (included).
-3. Keep descriptions ≤3 sentences (e5-small 512-token limit; keeps 1 chunk/field so highlights are simple).
+3. Keep descriptions ≤3 sentences — keeps 1 chunk/field so highlights stay simple, independent of which embedding model backs `semantic_e5`.
 4. Client major version must match deployment (v9 client for serverless).
 5. Geo presets are hand-tuned to partition cleanly against this specific 30-region dataset — re-check `AREA_PRESETS` boundaries in `lib/geo.ts` if regions are added or removed from the dataset.
 6. Photo URLs are external Wikimedia hotlinks — verified working at authoring time, but the `DishThumb` `onError` fallback (gradient + monogram) is what actually guarantees nothing renders broken if Commons changes a filename later.
