@@ -123,14 +123,13 @@ Each `{ query, label, archetype, observe, area? }`. All 5 verified against the l
 
 ## Docker + Cloud Run
 
-3-stage `node:22-alpine` Dockerfile copying `.next/standalone` + static; `PORT=8080`. Env read at runtime only (one image everywhere). Deploy:
+3-stage `node:22-alpine` Dockerfile copying `.next/standalone` + static; `PORT=8080`. Env read at runtime only (one image everywhere). A GitHub Actions workflow (`.github/workflows/docker-publish.yml`) builds and pushes the image to Docker Hub (`kennethfoo24/elastic-hawker-search`) on every push to `main`. Deploy that image to Cloud Run with:
 
 ```bash
-gcloud run deploy hawker-search --source . --region asia-southeast1 --allow-unauthenticated \
-  --set-env-vars ELASTICSEARCH_URL=... --set-secrets ELASTICSEARCH_API_KEY=hawker-es-api-key:latest
+npm run deploy
 ```
 
-(API key in Secret Manager; grant run SA `secretAccessor`.)
+This runs `scripts/deploy-cloud-run.sh`, which reads `ELASTICSEARCH_URL` / `ELASTICSEARCH_API_KEY` / `ES_INDEX` from `.env.local`, pushes the API key into Secret Manager (`hawker-es-api-key`, granting the Cloud Run runtime service account `secretAccessor` — never passed as a plain env var), and deploys the Docker Hub image to the `hawker-search` service in `asia-southeast1`, publicly accessible. Full runbook: [docs/DEPLOY.md](DEPLOY.md).
 
 ## Build sequence
 
@@ -143,9 +142,9 @@ gcloud run deploy hawker-search --source . --region asia-southeast1 --allow-unau
 6. **Local review checkpoint:** run `npm run dev`, walk through all 5 chips (and the area filter) in the browser; Kenneth reviews the working demo and suggests improvements. Iterate on UI/relevance/dataset here until happy.
 
 **Phase B — deploy (only after Phase A sign-off):**
-7. Dockerfile; local `docker build && docker run` smoke test.
-8. Cloud Run deploy (needs Kenneth's gcloud project + Secret Manager setup).
-9. README with demo runbook: warm-up, chip walk-through script, gotchas.
+7. Dockerfile; local `docker build && docker run` smoke test. ✅
+8. GitHub Actions → Docker Hub, `scripts/deploy-cloud-run.sh` → Cloud Run (needs Kenneth's gcloud project + Secret Manager setup). ✅ script/CI in place; first live deploy still pending.
+9. README with demo runbook: warm-up, chip walk-through script, gotchas. ✅
 
 ## Verification
 

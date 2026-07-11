@@ -15,6 +15,7 @@ Customer-facing Elastic demo: an additive progression across four columns — **
 - `npm run seed` — recreate index + bulk ingest `data/*.json` (first run auto-deploys the e5 model; budget a few minutes)
 - `npm run warm` — one semantic query; run ~5 min before any live demo (ML scales to zero when idle)
 - `npx tsx scripts/validate-chips.ts` — curl-equivalent acceptance test for all 5 chips across all 4 columns; the demo's core "does the story actually reproduce" check
+- `npm run deploy` — deploy the latest Docker Hub image to Cloud Run (`scripts/deploy-cloud-run.sh`); see [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ## Architecture notes
 
