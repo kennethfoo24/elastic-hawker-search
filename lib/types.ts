@@ -1,4 +1,4 @@
-export type TierKey = "keyword" | "semantic" | "combined" | "hybrid";
+export type TierKey = "keyword" | "semantic" | "hybrid";
 
 export interface GeoPoint {
   lat: number;
@@ -19,7 +19,7 @@ export interface Hit {
   location: GeoPoint | null;
   /** distance in km from the active area preset's center, only set when an area filter is applied */
   distanceKm: number | null;
-  /** constituent ranks in the standalone keyword/semantic tiers (combined + hybrid tiers only) */
+  /** constituent ranks in the standalone keyword/semantic tiers (hybrid tier only) */
   legRanks?: { keyword: number | null; semantic: number | null };
 }
 

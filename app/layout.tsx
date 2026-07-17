@@ -8,9 +8,9 @@ const plexMono = IBM_Plex_Mono({ weight: ["400", "500"], subsets: ["latin"], var
 const baloo = Baloo_2({ weight: ["600", "700", "800"], subsets: ["latin"], variable: "--font-baloo" });
 
 export const metadata: Metadata = {
-  title: "Hawker Search — one query, four steps to Hybrid",
+  title: "Hawker Search — from Keyword to Hybrid",
   description:
-    "Elastic demo: Keyword -> Semantic (multilingual-e5) -> Keyword+Semantic (naive) -> +RRF, over a multilingual Singapore hawker food guide.",
+    "Elastic demo: Keyword -> Semantic (multilingual-e5) -> Hybrid (RRF), over a multilingual Singapore hawker food guide.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

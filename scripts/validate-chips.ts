@@ -1,7 +1,7 @@
 /**
- * Relevance acceptance test: run every suggested-query chip through all 4
- * columns (keyword, semantic, combined, hybrid) and print the top hits so
- * each chip's intended story can be verified/tuned. Usage: npx tsx scripts/validate-chips.ts
+ * Relevance acceptance test: run every suggested-query chip through all 3
+ * columns (keyword, semantic, hybrid) and print the top hits so each chip's
+ * intended story can be verified/tuned. Usage: npx tsx scripts/validate-chips.ts
  */
 import { config } from "dotenv";
 config({ path: ".env.local" });
@@ -20,7 +20,7 @@ const client = new Client({
   requestTimeout: 120_000,
 });
 
-const TIERS: TierKey[] = ["keyword", "semantic", "combined", "hybrid"];
+const TIERS: TierKey[] = ["keyword", "semantic", "hybrid"];
 
 async function main() {
   const top = Number(process.env.TOP ?? 5);

@@ -66,7 +66,6 @@ function esErrorMessage(err: unknown): string {
 const HIGHLIGHT_FIELD: Record<TierKey, string> = {
   keyword: "description",
   semantic: "semantic_e5",
-  combined: "semantic_e5",
   hybrid: "semantic_e5",
 };
 
@@ -79,7 +78,7 @@ export async function POST(req: Request) {
   const area = findAreaPreset(areaKey);
   const areaCenter: GeoPoint | null = area ? { lat: area.lat, lon: area.lon } : null;
 
-  const keys: TierKey[] = ["keyword", "semantic", "combined", "hybrid"];
+  const keys: TierKey[] = ["keyword", "semantic", "hybrid"];
   const bodies: Record<TierKey, object> = Object.fromEntries(
     keys.map((key) => [key, buildQuery(key, q, area)])
   ) as Record<TierKey, object>;
@@ -106,13 +105,12 @@ export async function POST(req: Request) {
       s.status === "fulfilled" ? s.value : { key, tookMs: 0, hits: [], error: esErrorMessage(s.reason) };
   });
 
-  // Combined + Hybrid attribution: both legs are the exact keyword/semantic
-  // queries from columns 1 & 2, so each fused hit's constituent ranks come
-  // from an _id lookup — no explain:true needed.
+  // Hybrid attribution: both legs are the exact keyword/semantic queries from
+  // columns 1 & 2, so each fused hit's constituent ranks come from an _id
+  // lookup — no explain:true needed.
   const rankOf = (tier: TierResult, id: string) => tier.hits.find((h) => h.id === id)?.rank ?? null;
-  for (const key of ["combined", "hybrid"] as const) {
-    if (tiers[key].error) continue;
-    tiers[key].hits = tiers[key].hits.map((h) => ({
+  if (!tiers.hybrid.error) {
+    tiers.hybrid.hits = tiers.hybrid.hits.map((h) => ({
       ...h,
       legRanks: {
         keyword: rankOf(tiers.keyword, h.id),

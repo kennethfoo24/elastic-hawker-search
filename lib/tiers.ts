@@ -18,13 +18,8 @@ export const TIERS: TierMeta[] = [
     how: "Ranks by meaning. Cross-lingual dense vectors.",
   },
   {
-    key: "combined",
-    name: "Keyword + Semantic",
-    how: "Adds BM25 + cosine scores directly — BM25 usually dominates.",
-  },
-  {
     key: "hybrid",
-    name: "Keyword + Semantic + Rank",
-    how: "Fuses by rank, not score — fixes the scale mismatch.",
+    name: "Hybrid (Keyword + Semantic + RRF)",
+    how: "Both engines, fused by rank (RRF) — best of each.",
   },
 ];

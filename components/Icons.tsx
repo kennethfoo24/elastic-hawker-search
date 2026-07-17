@@ -21,16 +21,6 @@ export function LayersIcon({ className }: IconProps) {
   );
 }
 
-/** Two overlapping circles — union of the keyword and semantic signals. */
-export function CombineIcon({ className }: IconProps) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
-      <circle cx="9.5" cy="12" r="6" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="14.5" cy="12" r="6" stroke="currentColor" strokeWidth="1.6" />
-    </svg>
-  );
-}
-
 export function TrophyIcon({ className }: IconProps) {
   return (
     <svg viewBox="0 0 24 24" fill="none" className={className} aria-hidden="true">
@@ -66,7 +56,6 @@ export function PinIcon({ className }: IconProps) {
 const TIER_ICON: Record<TierKey, (p: IconProps) => React.ReactElement> = {
   keyword: SearchGlassIcon,
   semantic: LayersIcon,
-  combined: CombineIcon,
   hybrid: TrophyIcon,
 };
 

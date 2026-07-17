@@ -1,8 +1,10 @@
 # Hawker Search
 
-Elastic hybrid-search demo: an additive **Keyword → Semantic → Keyword + Semantic →
-+ RRF** progression over a Singapore hawker-food dataset. Full design: [docs/PLAN.md](docs/PLAN.md).
-Deploying to production: [docs/DEPLOY.md](docs/DEPLOY.md).
+Elastic search-evolution demo over a Singapore hawker-food dataset: an additive
+**Keyword → Semantic → Hybrid (Keyword + Semantic + RRF)** column progression, with a geospatial
+area filter and dish photos layered on every column equally.
+
+Full design: [docs/PLAN.md](docs/PLAN.md). Deploying to production: [docs/DEPLOY.md](docs/DEPLOY.md).
 
 ## Requirements
 

@@ -105,7 +105,7 @@ export default function Home() {
         </div>
       )}
 
-      <main className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <main className="grid flex-1 grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         {TIERS.map((meta) => (
           <TierColumn
             key={meta.key}

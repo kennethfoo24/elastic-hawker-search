@@ -36,7 +36,7 @@ function gradientFor(name: string) {
   };
 }
 
-function DishThumb({ name, url }: { name: string; url: string | null }) {
+export function DishThumb({ name, url }: { name: string; url: string | null }) {
   const [errored, setErrored] = useState(false);
   const showPhoto = url && !errored;
   return (
