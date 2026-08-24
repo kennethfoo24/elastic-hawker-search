@@ -73,7 +73,7 @@ async function recreateIndex() {
         tags: { type: "text", fields: { keyword: { type: "keyword" } } },
         image_url: { type: "keyword", index: false },
         location: { type: "geo_point" },
-        semantic_e5: { type: "semantic_text", inference_id: ".microsoft-multilingual-e5-large" },
+        semantic_e5: { type: "semantic_text", inference_id: ".openai-text-embedding-3-large" },
       },
     },
   });

@@ -2,11 +2,11 @@
 
 ## Context
 
-Kenneth (Elastic SA) needs a customer-facing demo that tells the **evolution of search** story over a Singapore **hawker food guide** (123 curated dishes, every one with a real photo): an additive left-to-right column progression, **Keyword (BM25) → Semantic (multilingual-e5) → Hybrid (Keyword + Semantic + RRF)**, plus a geospatial area filter and dish photos layered on all columns equally. 5 chips, one per teaching point: exact term (all agree) → paraphrase (RRF recovers a dish neither engine ranked first) → pure concept (Keyword empty, Hybrid gracefully inherits Semantic) → clean win (Semantic's correct read survives fusion) → geospatial (same relevance, narrower candidate pool).
+Kenneth (Elastic SA) needs a customer-facing demo that tells the **evolution of search** story over a Singapore **hawker food guide** (123 curated dishes, every one with a real photo): an additive left-to-right column progression, **Keyword (BM25) → Semantic (dense embeddings) → Hybrid (Keyword + Semantic + RRF)**, plus a geospatial area filter and dish photos layered on all columns equally. 5 chips, one per teaching point: exact term (all agree) → paraphrase (RRF recovers a dish neither engine ranked first) → pure concept (Keyword empty, Hybrid gracefully inherits Semantic) → clean win (Semantic's correct read survives fusion) → geospatial (same relevance, narrower candidate pool).
 
 Earlier designs preceded this one (see git history): a "4 always-visible columns" Keyword/Sparse/Dense/Hybrid spread, then a 4-step progression that included a **"Keyword + Semantic (naive score addition)" anti-pattern column** between Semantic and RRF. The naive column was dropped 2026-07-17 at Kenneth's request to tighten the arc ("why RRF beats naive addition" is now a talk-track claim, not a visible column), and the last column was renamed from "…+ Rank" to "…+ RRF" because "Rank" read as a semantic *reranker* — which this demo deliberately does not include (on a 123-doc curated dataset where Hybrid already wins every chip, a reranker visibly changes nothing; it's a talk-track mention). An **Ask mode (RAG)** — side-by-side LLM answers grounded on Keyword vs Hybrid top-5 via EIS `chat_completion` — was prototyped 2026-07-17 and removed the same day at Kenneth's request, before ever being committed.
 
-**Target infra:** user's existing **Elastic Cloud Serverless** project (verified: serverless includes RRF retriever with no license tiering, plus the multilingual e5-large inference endpoint `.microsoft-multilingual-e5-large` on the **Elastic Inference Service** — shared, always-warm, no per-project model deploy or scale-to-zero cold start). App = Next.js container deployable to **Google Cloud Run**, connected via `ELASTICSEARCH_URL` + `ELASTICSEARCH_API_KEY` env vars; identical local `npm run dev` flow.
+**Target infra:** user's existing **Elastic Cloud Serverless** project (verified: serverless includes RRF retriever with no license tiering, plus multilingual embedding inference endpoints on the **Elastic Inference Service** — shared, always-warm, no per-project model deploy or scale-to-zero cold start; originally `.microsoft-multilingual-e5-large`, switched to `.openai-text-embedding-3-large` on 2026-08-24 after Elastic retired the e5-large endpoint from the EIS catalog — see CLAUDE.md for the model evaluation). App = Next.js container deployable to **Google Cloud Run**, connected via `ELASTICSEARCH_URL` + `ELASTICSEARCH_API_KEY` env vars; identical local `npm run dev` flow.
 
 ## Project location
 
@@ -63,7 +63,7 @@ One doc per dish; `copy_to` fans source fields into the semantic_text field, so 
     "price_sgd": { "type": "float" }, "tags": { "type": "text", "fields": {"keyword": {"type": "keyword"}} },
     "image_url": { "type": "keyword", "index": false },
     "location": { "type": "geo_point" },
-    "semantic_e5": { "type": "semantic_text", "inference_id": ".microsoft-multilingual-e5-large" }
+    "semantic_e5": { "type": "semantic_text", "inference_id": ".openai-text-embedding-3-large" }
   } }
 }
 ```
@@ -75,7 +75,7 @@ Analyzer: **standard** (unigram CJK is fine and reinforces the "lexical needs li
 `size: 5` (top-5 per column), retriever framework throughout. `match` is the documented recommended query for semantic_text (8.18+/serverless). Every builder takes an optional `AreaPreset` and wraps its query in a `geo_distance` **filter** (not a ranking signal) so all columns search the same narrowed candidate pool when an area is active.
 
 1. **Keyword — `buildKeyword(q, area?)`:** `standard` retriever → `multi_match` on `["name^3","aliases^2","description","stall","tags"]` with **`minimum_should_match: "75%"`** — genuinely returns nothing when there's no real lexical overlap, instead of a long tail of single-token matches. Default highlighter on description.
-2. **Semantic — `buildSemantic(q, area?)`:** `standard` retriever → `match` on `semantic_e5`; semantic highlighter (`"type":"semantic"`, 1 fragment, order score). Cross-lingual (multilingual-e5-large, served via the Elastic Inference Service).
+2. **Semantic — `buildSemantic(q, area?)`:** `standard` retriever → `match` on `semantic_e5`; semantic highlighter (`"type":"semantic"`, 1 fragment, order score). Cross-lingual dense embeddings (`.openai-text-embedding-3-large`, served via the Elastic Inference Service).
 3. **Hybrid (Keyword + Semantic + RRF) — `buildHybrid(q, area?)`:** `rrf` retriever fusing the *same two legs* (keyword, semantic) by rank instead of raw score — `rank_constant: 60` (documented default), `rank_window_size: 50` (default is 10 — too shallow). Rank fusion is immune to the BM25/cosine scale mismatch that breaks naive score addition (the dropped `buildCombined` column demonstrated that anti-pattern live — see git history).
 
 **Attribution (money shot):** don't use `explain:true`; the API route already has the keyword/semantic rankings, and Hybrid's legs are literally the same queries as columns 1 & 2 — annotate each Hybrid hit "KEY #n · SEM #m" by `_id` lookup in those lists.
@@ -102,7 +102,7 @@ Each `{ query, label, archetype, observe, area? }`. All 5 verified against the l
 | # | Query | Archetype | Observe |
 |---|---|---|---|
 | 1 | `Hainanese chicken rice` | exact term | All three columns agree; Keyword alone is enough |
-| 2 | `spicy coconut milk noodle soup` | paraphrase | Keyword barely finds anything and ranks Nasi Lemak over Katong Laksa. Semantic doesn't even surface Katong Laksa in its top 5. Hybrid promotes Katong Laksa to #1 — rank fusion recovering a doc that no single leg ranked highest is the point |
+| 2 | `spicy coconut milk noodle soup` | paraphrase | Keyword barely finds anything and ranks Nasi Lemak over Katong Laksa. Semantic finds Katong Laksa too, but ranks it #2, behind Curry Chicken Noodles. Hybrid promotes Katong Laksa to #1 — rank fusion recovering a doc that no single leg ranked highest is the point |
 | 3 | `something warm and filling to eat when it's raining outside` | pure concept | Keyword returns nothing — no literal keyword ties this sentence to any dish. Semantic reads the mood; with no lexical signal to fuse, Hybrid simply inherits Semantic's read |
 | 4 | `javanese noodles in sweet potato gravy` | clean win | Keyword narrowly misranks Curry Chicken Noodles above Mee Rebus (the actual Javanese sweet-potato-gravy dish) on raw token overlap. Semantic gets it right, and Hybrid's rank fusion lets the correct read win |
 | 5 | `spicy noodle soup` + area **East** | geospatial filter | Unfiltered, Hybrid's top picks scatter across the island (Lau Pa Sat, Little India, Beach Road). Filtered to the East, Bak Chor Mee (Bedok) keeps #1 while central picks are replaced by genuinely-eastern dishes (Ayam Bakar/Bedok, Wanton Mee/Joo Chiat) |

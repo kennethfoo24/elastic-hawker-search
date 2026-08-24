@@ -20,7 +20,7 @@ export const SUGGESTED_QUERIES: SuggestedQuery[] = [
     label: "spicy coconut milk noodle soup",
     archetype: "paraphrase",
     observe:
-      "Keyword barely finds anything and ranks Nasi Lemak over Katong Laksa. Semantic doesn't even surface Laksa in its top 5. Hybrid fuses the two lists by rank (RRF) and promotes Katong Laksa to #1 — recovering a dish neither engine ranked first is exactly what rank fusion is for.",
+      "Keyword barely finds anything and ranks Nasi Lemak over Katong Laksa. Semantic finds Katong Laksa too, but ranks it #2, behind Curry Chicken Noodles. Hybrid fuses the two lists by rank (RRF) and promotes Katong Laksa to #1 — recovering a dish neither engine ranked first is exactly what rank fusion is for.",
   },
   {
     query: "something warm and filling to eat when it's raining outside",

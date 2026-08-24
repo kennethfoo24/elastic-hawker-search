@@ -1,13 +1,13 @@
 # Hawker Search — Evolution of Search Demo
 
-Customer-facing Elastic demo over a multilingual Singapore hawker-food dataset: an additive progression across three columns — **Keyword (BM25) → Semantic (multilingual-e5) → Hybrid (Keyword + Semantic + RRF)**. Each column adds one technique to the last, so the value (and failure mode) of each step is visible without touching a toggle. A geo `distance` filter (area pills) and dish photos are layered on top, on every column equally.
+Customer-facing Elastic demo over a multilingual Singapore hawker-food dataset: an additive progression across three columns — **Keyword (BM25) → Semantic (dense embeddings) → Hybrid (Keyword + Semantic + RRF)**. Each column adds one technique to the last, so the value (and failure mode) of each step is visible without touching a toggle. A geo `distance` filter (area pills) and dish photos are layered on top, on every column equally.
 
 Full design: [docs/PLAN.md](docs/PLAN.md).
 
 ## Stack & infra
 
 - Next.js 15 (App Router, TS), Tailwind v4, `@elastic/elasticsearch` v9
-- Elasticsearch = **Elastic Cloud Serverless** (RRF included out of the box; semantic embeddings run on the **Elastic Inference Service** via `.microsoft-multilingual-e5-large` — shared, always-warm, no per-project ML allocation or cold start)
+- Elasticsearch = **Elastic Cloud Serverless** (RRF included out of the box; semantic embeddings run on the **Elastic Inference Service** via `.openai-text-embedding-3-large` — shared, always-warm, no per-project ML allocation or cold start)
 - Env (`.env.local`, never committed): `ELASTICSEARCH_URL`, `ELASTICSEARCH_API_KEY`, optional `ES_INDEX` (default `hawker-dishes`)
 - Deploy target (Phase B only): Docker → Google Cloud Run, `asia-southeast1`
 
@@ -64,3 +64,11 @@ Full design: [docs/PLAN.md](docs/PLAN.md).
 - [x] An **Ask mode (RAG)** — hero Search↔Ask toggle, side-by-side answers grounded on Keyword vs Hybrid top-5 via EIS `chat_completion`, 3 ask chips, `scripts/validate-ask.ts` — was prototyped the same day and then **removed at Kenneth's request before ever being committed**; the demo is Search-only again. If reviving: EIS chat endpoints are stream-only (raw fetch to `_inference/chat_completion/{id}/_stream`), zero-hit grounding must short-circuit without an LLM call, and a "keyword grounds the wrong dish" chip won't reproduce on this dataset (the right dish always sneaks into keyword top-5 and the LLM rescues it)
 - [x] First live Cloud Run deploy (2026-07-17): `hawker-search` service in `asia-southeast1`, project `elastic-sa` — https://hawker-search-1059491012611.asia-southeast1.run.app (smoke-tested live: search 200 with correct results, no Ask surface)
 - [ ] Demo runbook walkthrough with Kenneth
+
+## Current state (2026-08-24)
+
+- [x] `.microsoft-multilingual-e5-large` was retired from the Elastic Inference Service catalog sometime after 2026-07-17 (confirmed via live `GET _inference` against the project — endpoint no longer listed, live Semantic/Hybrid columns were throwing `resource_not_found_exception`). Evaluated replacements against the actual chip stories, not just "does it error":
+  - `.jina-embeddings-v3` and `.jina-embeddings-v5-text-small` — both EIS-hosted (no cold start, confirmed empirically: first call 327ms, no spin-up delay) but both are *too accurate* for this dataset — Semantic alone now ranks Katong Laksa #1 on the paraphrase chip, leaving nothing for RRF to "recover." Jina's models are also CC BY-NC 4.0 (non-commercial) licensed by Jina AI, a real caveat for a customer-facing demo.
+  - `.multilingual-e5-small-elasticsearch` (the ML-node model dropped 2026-07-17) reproduces all 5 chip stories closely, but reintroduces the scale-to-zero cold-start risk. Tried pinning `min_number_of_allocations: 1` to keep an ML node always warm — **not possible on Elastic Cloud Serverless**: editing the preconfigured `.`-prefixed endpoint is rejected outright, and a custom endpoint created against the same model had Serverless silently reset the minimum back to 0. Always-on ML node allocation is a self-managed/ECH concept, not available here.
+  - **`.openai-text-embedding-3-large`** — EIS-hosted (no cold start, 6s reseed), reproduces chip 1 exactly (all 3 columns agree) and chip 2 correctly (Katong Laksa sits at #2 in both Keyword and Semantic individually, RRF promotes it to #1 — a clean "recovered by rank fusion" story), and is governed by OpenAI's standard commercial Services Agreement (no non-commercial restriction). **This is what `semantic_e5` now uses.**
+  - Re-synced chip 2's `observe` copy ("doesn't even surface it in its top 5" → "ranks it #2, behind Curry Chicken Noodles") to match live results, re-ran `validate-chips.ts` — all 5 chip stories hold.
